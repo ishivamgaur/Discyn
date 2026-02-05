@@ -1,6 +1,14 @@
-import React from "react";
-import { Modal, View, Text, TouchableOpacity, Platform } from "react-native";
+import React, { useEffect, useRef } from "react";
+import {
+  Modal,
+  View,
+  Text,
+  TouchableOpacity,
+  Platform,
+  Animated,
+} from "react-native";
 import { useTheme } from "../context/ThemeContext";
+import { Ionicons } from "@expo/vector-icons";
 
 export default function CustomAlert({
   visible,
@@ -11,59 +19,99 @@ export default function CustomAlert({
   confirmText = "Confirm",
   cancelText = "Cancel",
   confirmColor = "bg-red-500", // Default danger
+  icon = "alert-circle", // Default icon
+  iconColor = "#ef4444", // Default icon color (red-500)
 }) {
   const { isDark } = useTheme();
+  const scaleValue = useRef(new Animated.Value(0)).current;
+  const opacityValue = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (visible) {
+      scaleValue.setValue(0);
+      opacityValue.setValue(0);
+      Animated.parallel([
+        Animated.spring(scaleValue, {
+          toValue: 1,
+          friction: 6,
+          useNativeDriver: true,
+        }),
+        Animated.timing(opacityValue, {
+          toValue: 1,
+          duration: 200,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    }
+  }, [visible]);
+
+  if (!visible) return null;
 
   return (
     <Modal
-      animationType="fade"
       transparent={true}
       visible={visible}
       onRequestClose={onCancel}
+      animationType="none"
+      statusBarTranslucent
     >
-      <View className="flex-1 justify-center items-center bg-black/50">
-        <View
+      <View className="flex-1 justify-center items-center bg-black/60">
+        <Animated.View
           className={`w-[85%] max-w-sm p-6 rounded-3xl ${
-            isDark ? "bg-gray-900 border border-gray-800" : "bg-white"
-          } shadow-2xl`}
-          style={
+            isDark ? "bg-zinc-900 border border-zinc-800" : "bg-white"
+          } shadow-2xl items-center`}
+          style={[
             Platform.OS === "ios"
               ? {
                   shadowColor: "#000",
                   shadowOffset: { width: 0, height: 10 },
-                  shadowOpacity: 0.3,
+                  shadowOpacity: 0.4,
                   shadowRadius: 20,
                 }
-              : { elevation: 10 }
-          }
+              : { elevation: 20 },
+            {
+              opacity: opacityValue,
+              transform: [{ scale: scaleValue }],
+            },
+          ]}
         >
+          {/* Icon Circle */}
+          <View
+            className={`w-16 h-16 rounded-full items-center justify-center mb-4 ${
+              isDark ? "bg-zinc-800" : "bg-zinc-100"
+            }`}
+          >
+            <Ionicons name={icon} size={32} color={iconColor} />
+          </View>
+
           <Text
-            className={`text-xl font-bold mb-3 text-center ${
-              isDark ? "text-gray-100" : "text-gray-900"
+            className={`text-xl font-bold mb-2 text-center ${
+              isDark ? "text-white" : "text-gray-900"
             }`}
           >
             {title}
           </Text>
           <Text
-            className={`text-base mb-6 text-center ${
-              isDark ? "text-gray-300" : "text-gray-600"
+            className={`text-sm mb-8 text-center px-2 ${
+              isDark ? "text-zinc-400" : "text-zinc-500"
             }`}
           >
             {message}
           </Text>
 
-          <View className="flex-row justify-between gap-3">
+          <View className="flex-row w-full gap-3">
             {onCancel && (
               <TouchableOpacity
                 onPress={onCancel}
-                className={`flex-1 py-3 rounded-xl border ${
+                activeOpacity={0.8}
+                className={`flex-1 py-3.5 rounded-2xl border ${
                   isDark
-                    ? "border-gray-600 bg-gray-700"
-                    : "border-gray-200 bg-gray-100"
+                    ? "border-zinc-700 bg-zinc-800"
+                    : "border-zinc-200 bg-zinc-100"
                 }`}
               >
                 <Text
-                  className={`text-center font-semibold ${
+                  className={`text-center font-bold text-sm ${
                     isDark ? "text-white" : "text-gray-700"
                   }`}
                 >
@@ -74,14 +122,15 @@ export default function CustomAlert({
 
             <TouchableOpacity
               onPress={onConfirm}
-              className={`flex-1 py-3 rounded-xl ${confirmColor}`}
+              activeOpacity={0.9}
+              className={`flex-1 py-3.5 rounded-2xl shadow-lg ${confirmColor}`}
             >
-              <Text className="text-white text-center font-semibold">
+              <Text className="text-white text-center font-bold text-sm">
                 {confirmText}
               </Text>
             </TouchableOpacity>
           </View>
-        </View>
+        </Animated.View>
       </View>
     </Modal>
   );
