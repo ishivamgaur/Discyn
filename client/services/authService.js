@@ -6,7 +6,7 @@ import { Platform } from "react-native";
 // Handle API_URL for Web vs Native
 const getApiUrl = () => {
   if (Platform.OS === "web") {
-    return "http://localhost:5000"; // Web uses localhost
+    return "http://localhost:3000"; // Web uses localhost
   }
   return "https://discyn.onrender.com"; // Production Render URL
 };
@@ -92,12 +92,18 @@ api.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config;
 
+    // Handle 401 Unauthorized
     if (error.response?.status === 401 && !originalRequest._retry) {
       originalRequest._retry = true;
 
       try {
         const refreshToken = await getItem("refreshToken");
-        if (!refreshToken) throw new Error("No refresh token");
+        if (!refreshToken) {
+          // No refresh token - force logout immediately
+          console.log("No refresh token found, logging out...");
+          await logout();
+          return Promise.reject(error);
+        }
 
         const { data } = await axios.post(`${API_URL}/api/users/refresh`, {
           refreshToken,
@@ -108,6 +114,8 @@ api.interceptors.response.use(
         originalRequest.headers["Authorization"] = `Bearer ${data.accessToken}`;
         return api(originalRequest);
       } catch (refreshError) {
+        // Refresh failed - force logout
+        console.log("Token refresh failed, logging out...");
         await logout();
         return Promise.reject(refreshError);
       }
