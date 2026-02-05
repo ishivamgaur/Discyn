@@ -28,6 +28,8 @@ export function useCustomAlert() {
       confirmText = "OK",
       cancelText = "Cancel",
       confirmColor = "bg-indigo-500",
+      icon = "alert-circle",
+      iconColor = "#ef4444",
     }) => {
       setAlertConfig({
         visible: true,
@@ -46,6 +48,8 @@ export function useCustomAlert() {
         confirmText,
         cancelText,
         confirmColor,
+        icon,
+        iconColor,
       });
     },
     [],
