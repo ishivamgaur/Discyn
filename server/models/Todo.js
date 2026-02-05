@@ -58,6 +58,32 @@ const todoSchema = new mongoose.Schema(
         type: Date,
       },
     ],
+    // 1. Scheduling (Timeline View)
+    scheduledTime: {
+      type: Date,
+      index: true, // For sorting timeline
+    },
+    duration: {
+      type: Number, // in minutes (e.g., 60 for 1 hour)
+      default: 30,
+    },
+
+    // 2. Nagging Reminders
+    reminderType: {
+      type: String,
+      enum: ["NORMAL", "NAGGING"], // NORMAL = Once, NAGGING = Every X min until done
+      default: "NORMAL",
+    },
+    nagInterval: {
+      type: Number, // in minutes (e.g. 2, 5, 10)
+      default: 5,
+    },
+
+    // 3. Focus Timer
+    timeSpent: {
+      type: Number, // in seconds (Accumulated focus time)
+      default: 0,
+    },
     user: {
       type: mongoose.Schema.Types.ObjectId,
       required: true,
