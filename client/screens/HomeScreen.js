@@ -53,9 +53,11 @@ export default function HomeScreen({ navigation }) {
   const fetchTodos = async () => {
     try {
       const response = await api.get("/todos");
-      setTodos(response.data);
+      // Ensure we always set an array
+      setTodos(Array.isArray(response.data) ? response.data : []);
     } catch (error) {
       console.error(error);
+      setTodos([]); // Reset to empty array on error
     }
   };
 
@@ -114,10 +116,20 @@ export default function HomeScreen({ navigation }) {
         haptics.light(); // Task is being marked as incomplete
       }
 
-      await api.put(`/todos/${item._id}`, { isCompleted: !item.isCompleted });
+      console.log(
+        "Updating todo:",
+        item._id,
+        "isCompleted:",
+        !item.isCompleted,
+      );
+      const response = await api.put(`/todos/${item._id}`, {
+        isCompleted: !item.isCompleted,
+      });
+      console.log("Update response:", response.data);
       // Background sync
       fetchTodos();
     } catch (e) {
+      console.error("Toggle error:", e.response?.data || e.message);
       fetchTodos(); // Revert on fail
     }
   };
