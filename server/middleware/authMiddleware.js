@@ -16,11 +16,20 @@ export const protect = asyncHandler(async (req, res, next) => {
 
       req.user = await User.findById(decoded.id).select("-password");
 
+      // Check if user exists in database
+      if (!req.user) {
+        return res
+          .status(401)
+          .json({ message: "User not found, please login again" });
+      }
+
       next();
     } catch (error) {
       if (error.name === "TokenExpiredError") {
         // Token expired is expected behavior for refresh flow, suppress explicit error log
-        res.status(401).json({ message: "Not authorized, token expired" });
+        return res
+          .status(401)
+          .json({ message: "Not authorized, token expired" });
       } else {
         console.error(error);
         res.status(401);
