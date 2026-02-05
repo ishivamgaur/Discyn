@@ -8,6 +8,7 @@ import {
   TextInput,
   ScrollView,
   KeyboardAvoidingView,
+  Switch,
 } from "react-native";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import * as Notifications from "expo-notifications";
@@ -24,6 +25,8 @@ export default function ReminderScreen({ navigation }) {
   const [reminderText, setReminderText] = useState("");
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
+  const [repeatEnabled, setRepeatEnabled] = useState(false);
+  const [repeatInterval, setRepeatInterval] = useState(60); // minutes
 
   const onChange = (event, selectedDate) => {
     const currentDate = selectedDate || date;
@@ -37,6 +40,15 @@ export default function ReminderScreen({ navigation }) {
   };
 
   const scheduleNotification = async () => {
+    // Notifications don't work on web
+    if (Platform.OS === "web") {
+      Alert.alert(
+        "Not Supported",
+        "Push notifications are not available on web. Please use the mobile app.",
+      );
+      return;
+    }
+
     const trigger = new Date(date);
     trigger.setSeconds(0);
 
@@ -46,20 +58,53 @@ export default function ReminderScreen({ navigation }) {
     }
 
     try {
-      await Notifications.scheduleNotificationAsync({
-        content: {
-          title: "Reminder ⏰",
-          body: reminderText || "Here is your scheduled reminder!",
-          sound: true,
-        },
-        trigger,
-      });
-      Alert.alert(
-        "Success",
-        `Reminder set for ${trigger.toLocaleTimeString()}`,
-      );
+      // Request permissions first
+      const { status } = await Notifications.requestPermissionsAsync();
+      if (status !== "granted") {
+        Alert.alert(
+          "Permission Required",
+          "Please enable notifications in settings",
+        );
+        return;
+      }
+
+      if (repeatEnabled) {
+        // For repeating notifications, use seconds-based trigger
+        await Notifications.scheduleNotificationAsync({
+          content: {
+            title: "Reminder ⏰",
+            body: reminderText || "Here is your scheduled reminder!",
+            sound: "default",
+          },
+          trigger: {
+            seconds: repeatInterval * 60,
+            repeats: true,
+          },
+        });
+        Alert.alert(
+          "Success",
+          `Repeating reminder set! Will notify every ${repeatInterval} minutes.`,
+        );
+      } else {
+        // One-time notification with correct date trigger format
+        await Notifications.scheduleNotificationAsync({
+          content: {
+            title: "Reminder ⏰",
+            body: reminderText || "Here is your scheduled reminder!",
+            sound: "default",
+          },
+          trigger: {
+            date: trigger,
+          },
+        });
+        Alert.alert(
+          "Success",
+          `Reminder set for ${trigger.toLocaleTimeString()}`,
+        );
+      }
     } catch (e) {
-      Alert.alert("Error", "Failed to schedule notification");
+      console.error("Notification error:", e);
+      Alert.alert("Error", "Failed to schedule notification: " + e.message);
     }
   };
 
@@ -190,6 +235,71 @@ export default function ReminderScreen({ navigation }) {
                 onChange={onChange}
                 themeVariant={isDark ? "dark" : "light"}
               />
+            )}
+          </View>
+
+          {/* Repeat Option */}
+          <View
+            className={`p-4 rounded-2xl mb-6 shadow-sm ${isDark ? "bg-card-dark" : "bg-white"}`}
+          >
+            <View className="flex-row items-center justify-between mb-4">
+              <View className="flex-row items-center gap-2">
+                <Ionicons
+                  name="repeat"
+                  size={20}
+                  color={
+                    repeatEnabled ? "#3b82f6" : isDark ? "#71717a" : "#a1a1aa"
+                  }
+                />
+                <Text
+                  className={`font-semibold ${isDark ? "text-zinc-400" : "text-zinc-500"}`}
+                >
+                  REPEAT / NAG
+                </Text>
+              </View>
+              <Switch
+                value={repeatEnabled}
+                onValueChange={setRepeatEnabled}
+                trackColor={{ false: "#52525b", true: "#3b82f6" }}
+                thumbColor="#fff"
+              />
+            </View>
+
+            {repeatEnabled && (
+              <View>
+                <Text
+                  className={`text-sm mb-3 ${isDark ? "text-zinc-500" : "text-zinc-400"}`}
+                >
+                  Remind me every:
+                </Text>
+                <View className="flex-row gap-2">
+                  {[15, 30, 60, 120].map((mins) => (
+                    <TouchableOpacity
+                      key={mins}
+                      onPress={() => setRepeatInterval(mins)}
+                      className={`flex-1 p-3 rounded-xl items-center ${
+                        repeatInterval === mins
+                          ? "bg-primary"
+                          : isDark
+                            ? "bg-zinc-800"
+                            : "bg-zinc-100"
+                      }`}
+                    >
+                      <Text
+                        className={`font-bold ${
+                          repeatInterval === mins
+                            ? "text-white"
+                            : isDark
+                              ? "text-zinc-300"
+                              : "text-zinc-600"
+                        }`}
+                      >
+                        {mins < 60 ? `${mins}m` : `${mins / 60}h`}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
             )}
           </View>
 
