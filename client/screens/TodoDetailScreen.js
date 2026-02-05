@@ -39,7 +39,7 @@ export default function TodoDetailScreen({ route, navigation }) {
 
     setIsSaving(true);
     try {
-      await api.put(`/todos/${todo._id}`, { title, description });
+      await api.put(`/todos/${todo._id}`, { title, description, isCompleted });
       haptics.success();
       navigation.goBack();
     } catch (error) {
