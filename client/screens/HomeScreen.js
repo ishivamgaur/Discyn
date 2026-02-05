@@ -5,44 +5,46 @@ import {
   FlatList,
   TouchableOpacity,
   RefreshControl,
-  Alert,
+  ScrollView,
   Platform,
   UIManager,
   LayoutAnimation,
   ActivityIndicator,
+  Image,
 } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
+import { SafeAreaView } from "react-native-safe-area-context";
 import api from "../services/authService";
 import { useTheme } from "../context/ThemeContext";
+import haptics from "../services/hapticsService";
 import CustomAlert from "../components/CustomAlert";
 import { useCustomAlert } from "../hooks/useCustomAlert";
+import DailyTimeline from "../components/DailyTimeline";
 
-// Enable LayoutAnimation on Android
-if (Platform.OS === "android") {
-  if (UIManager.setLayoutAnimationEnabledExperimental) {
-    UIManager.setLayoutAnimationEnabledExperimental(true);
-  }
+// Enable LayoutAnimation
+if (
+  Platform.OS === "android" &&
+  UIManager.setLayoutAnimationEnabledExperimental
+) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
 }
-
-import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function HomeScreen({ navigation }) {
   const { isDark } = useTheme();
   const [todos, setTodos] = useState([]);
   const [refreshing, setRefreshing] = useState(false);
-  const [activeTab, setActiveTab] = useState("tasks"); // 'tasks' or 'habits'
-  const [viewMode, setViewMode] = useState("list"); // 'list' or 'grid'
-  const [filterStatus, setFilterStatus] = useState("all"); // 'all', 'pending', 'completed'
+  const [filterStatus, setFilterStatus] = useState("all");
 
   const { alertProps, showAlert } = useCustomAlert();
   const [itemToDelete, setItemToDelete] = useState(null);
   const [deletingId, setDeletingId] = useState(null);
-  const [selectedId, setSelectedId] = useState(null); // For long-press actions
 
-  const filteredTodos = todos.filter((t) => {
-    const matchesTab = activeTab === "tasks" ? !t.isRecurring : t.isRecurring;
-    if (!matchesTab) return false;
+  // Separate Habits (Recurring) and One-off Tasks
+  const habits = todos.filter((t) => t.isRecurring);
+  const oneOffTasks = todos.filter((t) => !t.isRecurring);
+
+  const filteredTasks = oneOffTasks.filter((t) => {
     if (filterStatus === "pending") return !t.isCompleted;
     if (filterStatus === "completed") return t.isCompleted;
     return true;
@@ -54,7 +56,6 @@ export default function HomeScreen({ navigation }) {
       setTodos(response.data);
     } catch (error) {
       console.error(error);
-      // Silent error on fetch
     }
   };
 
@@ -69,385 +70,176 @@ export default function HomeScreen({ navigation }) {
     }, []),
   );
 
-  const deleteTodo = async (idOfTodo) => {
-    const id = idOfTodo || itemToDelete;
-    if (!id) return;
-
-    // Alert is handled by confirmDelete trigger, this function just executes
+  const deleteTodo = async (id) => {
     try {
       setDeletingId(id);
-      if (Platform.OS !== "web") {
-        LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-      }
+      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
       await api.delete(`/todos/${id}`);
       fetchTodos();
     } catch (error) {
-      showAlert({ title: "Error", message: "Failed to delete todo" });
+      showAlert({ title: "Error", message: "Failed to delete item" });
     } finally {
       setDeletingId(null);
       setItemToDelete(null);
-      setSelectedId(null);
     }
   };
 
   const confirmDelete = (id) => {
     setItemToDelete(id);
     showAlert({
-      title: "Delete Task",
-      message: "Are you sure you want to remove this task?",
+      title: "Confirm Deletion",
+      message: "This action cannot be undone.",
       confirmText: "Delete",
       confirmColor: "bg-red-500",
-      onCancel: () => {}, // Show cancel
-      onConfirm: () => {
-        deleteTodo(id);
-      },
+      onConfirm: () => deleteTodo(id),
     });
   };
 
   const toggleComplete = async (item) => {
     try {
-      // Optimistic update
+      // Animate list layout changes
+      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+
+      // Optimistic
       setTodos((prev) =>
         prev.map((t) =>
-          t._id === item._id ? { ...t, isCompleted: !t.isCompleted } : t,
+          t._id === item._id ? { ...t, isCompleted: !item.isCompleted } : t,
         ),
       );
+
+      // Trigger Haptic
+      if (!item.isCompleted) {
+        haptics.success(); // Task is being marked as completed
+      } else {
+        haptics.light(); // Task is being marked as incomplete
+      }
+
       await api.put(`/todos/${item._id}`, { isCompleted: !item.isCompleted });
+      // Background sync
       fetchTodos();
     } catch (e) {
-      showAlert({ title: "Error", message: "Failed to update status" });
-      fetchTodos(); // Revert
+      fetchTodos(); // Revert on fail
     }
   };
 
-  // Clear selection when tapping elsewhere
-  const clearSelection = () => {
-    if (selectedId) setSelectedId(null);
-  };
+  // --- Render Components ---
 
-  const renderItem = ({ item }) => {
-    const isSelected = selectedId === item._id;
+  const renderTaskItem = ({ item }) => {
     const isDeleting = deletingId === item._id;
 
-    // Priority Background Colors (Light/Pastel for Light Mode, Darker Tint for Dark Mode)
-    let bgColorClass = isDark ? "bg-card-dark" : "bg-white";
-    let priorityColor = isDark ? "#ffffff" : "#000000";
+    // Priority Dot Color
+    const priorityColor =
+      item.priority === "HIGH"
+        ? "bg-red-500"
+        : item.priority === "MEDIUM"
+          ? "bg-orange-400"
+          : "bg-blue-400";
 
-    if (!isDark) {
-      if (item.priority === "HIGH") bgColorClass = "bg-red-50 border-red-100";
-      else if (item.priority === "MEDIUM")
-        bgColorClass = "bg-orange-50 border-orange-100";
-      else if (item.priority === "LOW")
-        bgColorClass = "bg-green-50 border-green-100";
-    } else {
-      // Dark mode subtle tints
-      if (item.priority === "HIGH")
-        bgColorClass = "bg-red-900/20 border-red-900/50";
-      else if (item.priority === "MEDIUM")
-        bgColorClass = "bg-orange-900/20 border-orange-900/50";
-      else if (item.priority === "LOW")
-        bgColorClass = "bg-green-900/20 border-green-900/50";
-    }
-
-    if (viewMode === "grid") {
-      // ... Grid View Implementation (simplified for brevity, focusing on List View first as per request)
-      // You can replicate logic here if needed
-      return (
-        <TouchableOpacity
-          activeOpacity={0.7}
-          onPress={() =>
-            isSelected
-              ? setSelectedId(null)
-              : navigation.navigate("TodoDetail", { todo: item })
-          }
-          onLongPress={() => setSelectedId(item._id)}
-          className={`flex-1 m-2 p-4 rounded-xl border ${bgColorClass} ${
-            isSelected ? "border-indigo-500 border-2" : ""
-          }`}
-          style={{ elevation: 2 }}
-        >
-          {isSelected ? (
-            <View className="flex-1 justify-center items-center gap-2">
-              <TouchableOpacity
-                onPress={() => toggleComplete(item)}
-                className="bg-green-500 p-2 rounded-full w-full items-center"
-              >
-                <Text className="text-white font-bold">Done</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={() => confirmDelete(item._id)}
-                className="bg-red-500 p-2 rounded-full w-full items-center"
-              >
-                <Text className="text-white font-bold">Delete</Text>
-              </TouchableOpacity>
-            </View>
-          ) : (
-            <>
-              <View className="flex-row justify-between mb-2">
-                <View
-                  className={`px-2 py-0.5 rounded text-xs ${
-                    item.priority === "HIGH"
-                      ? "bg-red-100 dark:bg-red-900"
-                      : item.priority === "MEDIUM"
-                        ? "bg-orange-100 dark:bg-orange-900"
-                        : "bg-green-100 dark:bg-green-900"
-                  }`}
-                >
-                  <Text
-                    className={`text-[10px] font-bold ${
-                      item.priority === "HIGH"
-                        ? "text-red-700 dark:text-red-300"
-                        : item.priority === "MEDIUM"
-                          ? "text-orange-700 dark:text-orange-300"
-                          : "text-green-700 dark:text-green-300"
-                    }`}
-                  >
-                    {item.priority}
-                  </Text>
-                </View>
-                {item.isRecurring && <Text>🔄</Text>}
-              </View>
-              <Text
-                numberOfLines={3}
-                className={`text-base font-bold ${
-                  item.isCompleted
-                    ? "line-through text-gray-400"
-                    : isDark
-                      ? "text-white"
-                      : "text-gray-900"
-                }`}
-              >
-                {item.title}
-              </Text>
-            </>
-          )}
-        </TouchableOpacity>
-      );
-    }
-
-    // List View (Primary Focus)
     return (
       <TouchableOpacity
-        activeOpacity={0.9}
+        activeOpacity={0.7}
         onPress={() => navigation.navigate("TodoDetail", { todo: item })}
         onLongPress={() => confirmDelete(item._id)}
-        className={`mx-4 mb-3 rounded-2xl overflow-hidden border ${
-          isSelected ? "border-indigo-500 border-2" : "border-transparent"
+        className={`mb-3 mx-4 p-4 rounded-2xl flex-row items-center border ${
+          isDark
+            ? "bg-card-dark border-card-highlight-dark"
+            : "bg-white border-border-light"
         }`}
         style={{
-          elevation: isSelected ? 8 : 2,
-          shadowColor: isSelected ? "#4f46e5" : "#000",
+          // Subtle shadow for depth
+          shadowColor: "#000",
           shadowOffset: { width: 0, height: 2 },
-          shadowOpacity: isSelected ? 0.3 : 0.05,
-          shadowRadius: 8,
-          backgroundColor: isDark ? "#1f2937" : "transparent", // Base bg handled by inner view
+          shadowOpacity: isDark ? 0 : 0.05,
+          shadowRadius: 4,
+          elevation: isDark ? 0 : 2,
         }}
       >
-        <View className={`p-4 flex-row items-center ${bgColorClass}`}>
-          {/* Done Checkbox */}
-          <TouchableOpacity
-            onPress={() => toggleComplete(item)}
-            className="mr-3"
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-          >
-            <View
-              className={`w-6 h-6 rounded-full border-2 justify-center items-center ${
-                item.isCompleted
-                  ? "bg-green-500 border-green-500"
-                  : isDark
-                    ? "border-gray-500"
-                    : "border-gray-400"
-              }`}
-            >
-              {item.isCompleted && (
-                <Ionicons name="checkmark" size={14} color="white" />
-              )}
-            </View>
-          </TouchableOpacity>
-
-          {/* Priority Strip (Left) - Adjusted position or removed if redundant */}
-          <View
-            className={`w-1.5 h-full absolute left-0 top-0 bottom-0 ${
-              item.priority === "HIGH"
-                ? "bg-red-500"
-                : item.priority === "MEDIUM"
-                  ? "bg-orange-500"
-                  : "bg-green-500"
-            }`}
-          />
-
-          <View className="flex-1 ml-3">
-            <View className="flex-row justify-between items-start">
-              <Text
-                numberOfLines={1}
-                className={`text-lg font-bold mb-1 ${
-                  item.isCompleted
-                    ? "line-through text-gray-400"
-                    : isDark
-                      ? "text-white"
-                      : "text-gray-800"
-                }`}
-              >
-                {item.title}
-              </Text>
-              {item.isRecurring && <Text className="text-xs">🔄</Text>}
-            </View>
-
-            {item.description ? (
-              <Text
-                numberOfLines={1}
-                className={`text-sm mb-2 ${
-                  isDark ? "text-gray-400" : "text-gray-600"
-                }`}
-              >
-                {item.description}
-              </Text>
-            ) : null}
-
-            {/* Tags / Meta */}
-            <View className="flex-row gap-2 mt-1">
-              <View
-                className={`px-2 py-0.5 rounded-md ${
-                  item.priority === "HIGH"
-                    ? "bg-red-100 dark:bg-red-900/40"
-                    : item.priority === "MEDIUM"
-                      ? "bg-orange-100 dark:bg-orange-900/40"
-                      : "bg-green-100 dark:bg-green-900/40"
-                }`}
-              >
-                <Text
-                  className={`text-[10px] font-bold uppercase tracking-wider ${
-                    item.priority === "HIGH"
-                      ? "text-red-700 dark:text-red-300"
-                      : item.priority === "MEDIUM"
-                        ? "text-orange-700 dark:text-orange-300"
-                        : "text-green-700 dark:text-green-300"
-                  }`}
-                >
-                  {item.priority}
-                </Text>
-              </View>
-              {item.isCompleted && (
-                <View className="bg-indigo-100 dark:bg-indigo-900/40 px-2 py-0.5 rounded-md">
-                  <Text className="text-indigo-700 dark:text-indigo-300 text-[10px] font-bold uppercase">
-                    Completed
-                  </Text>
-                </View>
-              )}
-            </View>
-          </View>
-
-          {/* Hint Arrow */}
-          <Ionicons
-            name="chevron-forward"
-            size={16}
-            color={isDark ? "#4b5563" : "#9ca3af"}
-          />
-
-          {isDeleting && (
-            <View className="absolute inset-0 bg-white/50 dark:bg-black/50 justify-center items-center rounded-2xl">
-              <ActivityIndicator color={priorityColor} />
-            </View>
+        {/* Check Circle */}
+        <TouchableOpacity
+          hitSlop={10}
+          onPress={() => toggleComplete(item)}
+          className={`w-6 h-6 rounded-full border-2 items-center justify-center mr-3 ${
+            item.isCompleted
+              ? "bg-primary border-primary"
+              : isDark
+                ? "border-zinc-600"
+                : "border-zinc-300"
+          }`}
+        >
+          {item.isCompleted && (
+            <Ionicons name="checkmark" size={14} color="white" />
           )}
+        </TouchableOpacity>
+
+        {/* Content */}
+        <View className="flex-1">
+          <Text
+            numberOfLines={1}
+            className={`text-base font-semibold ${
+              item.isCompleted
+                ? "line-through text-text-muted dark:text-text-muted-dark"
+                : isDark
+                  ? "text-text-dark"
+                  : "text-text-light"
+            }`}
+          >
+            {item.title}
+          </Text>
+          {item.description ? (
+            <Text
+              numberOfLines={1}
+              className="text-xs text-text-muted dark:text-text-muted-dark mt-0.5"
+            >
+              {item.description}
+            </Text>
+          ) : null}
         </View>
+
+        {/* Priority Dot */}
+        <View className={`w-2 h-2 rounded-full ${priorityColor} ml-2`} />
+
+        {isDeleting && (
+          <View className="absolute inset-0 bg-black/10 dark:bg-black/50 rounded-2xl justify-center items-center">
+            <ActivityIndicator size="small" />
+          </View>
+        )}
       </TouchableOpacity>
     );
   };
 
   return (
     <SafeAreaView
-      edges={["top"]}
-      className={`flex-1 ${isDark ? "bg-gray-900" : "bg-gray-100"}`}
+      className={`flex-1 ${isDark ? "bg-background-dark" : "bg-background-light"}`}
+      edges={["top", "left", "right"]}
     >
-      {/* Header / Tabs */}
-      <View className="flex-row px-4 pt-4 pb-4">
-        <TouchableOpacity
-          onPress={() => setActiveTab("tasks")}
-          className={`flex-1 py-3 rounded-l-xl border-y border-l items-center ${
-            activeTab === "tasks"
-              ? "bg-primary border-primary"
-              : isDark
-                ? "bg-card-dark border-gray-700"
-                : "bg-white border-gray-200"
-          }`}
-        >
+      {/* Header */}
+      <View className="px-4 py-4 flex-row justify-between items-center">
+        <View>
           <Text
-            className={`font-bold ${
-              activeTab === "tasks"
-                ? "text-white"
-                : isDark
-                  ? "text-gray-400"
-                  : "text-gray-600"
-            }`}
+            className={`text-3xl font-bold ${isDark ? "text-white" : "text-black"}`}
           >
-            Tasks
+            Good Day
           </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          onPress={() => setActiveTab("habits")}
-          className={`flex-1 py-3 rounded-r-xl border-y border-r items-center ${
-            activeTab === "habits"
-              ? "bg-primary border-primary"
-              : isDark
-                ? "bg-card-dark border-gray-700"
-                : "bg-white border-gray-200"
-          }`}
-        >
           <Text
-            className={`font-bold ${
-              activeTab === "habits"
-                ? "text-white"
-                : isDark
-                  ? "text-gray-400"
-                  : "text-gray-600"
-            }`}
+            className={`text-sm font-medium ${isDark ? "text-zinc-400" : "text-zinc-500"}`}
           >
-            Routines 🔄
+            {new Date().toLocaleDateString("en-US", {
+              weekday: "long",
+              month: "long",
+              day: "numeric",
+            })}
           </Text>
+        </View>
+        <TouchableOpacity
+          onPress={() => navigation.navigate("AddTodo", { type: "task" })}
+          className="w-10 h-10 bg-primary rounded-full items-center justify-center"
+        >
+          <Ionicons name="add" size={24} color="white" />
         </TouchableOpacity>
       </View>
-      {/* Filter Chips - iOS Scroll Indicator Hidden */}
-      <View className="px-4 mb-2">
-        <FlatList
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          data={["all", "pending", "completed"]}
-          keyExtractor={(item) => item}
-          renderItem={({ item }) => (
-            <TouchableOpacity
-              onPress={() => setFilterStatus(item)}
-              className={`px-4 py-1.5 rounded-full mr-2 border ${
-                filterStatus === item
-                  ? "bg-indigo-100 border-indigo-200"
-                  : isDark
-                    ? "bg-gray-800 border-gray-700"
-                    : "bg-white border-gray-200"
-              }`}
-            >
-              <Text
-                className={`capitalize text-xs font-medium ${
-                  filterStatus === item
-                    ? "text-indigo-700"
-                    : isDark
-                      ? "text-gray-400"
-                      : "text-gray-600"
-                }`}
-              >
-                {item}
-              </Text>
-            </TouchableOpacity>
-          )}
-        />
-      </View>
-      <FlatList
-        key={viewMode} // Forces re-render when switching columns
-        numColumns={viewMode === "grid" ? 2 : 1}
-        data={filteredTodos}
-        keyExtractor={(item) => item._id}
-        renderItem={renderItem}
-        columnWrapperStyle={
-          viewMode === "grid" ? { paddingHorizontal: 8 } : undefined
-        }
+
+      <ScrollView
+        contentContainerStyle={{ paddingBottom: 100 }}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -455,41 +247,57 @@ export default function HomeScreen({ navigation }) {
             tintColor={isDark ? "#fff" : "#000"}
           />
         }
-        ListEmptyComponent={
-          <View className="items-center justify-center mt-20">
+      >
+        {/* Stories / Habits Section Removed - Moved to Routines Tab */}
+        {/* Daily Timeline */}
+        <DailyTimeline
+          tasks={todos}
+          onTaskPress={(task) =>
+            navigation.navigate("TodoDetail", { todo: task })
+          }
+        />
+        {/* Tasks Section Header */}
+        <View className="flex-row items-center justify-between px-6 mb-2">
+          <Text
+            className={`text-lg font-bold ${isDark ? "text-white" : "text-black"}`}
+          >
+            Tasks
+          </Text>
+          {/* Minimal Filter */}
+          <TouchableOpacity
+            onPress={() =>
+              setFilterStatus((prev) => (prev === "all" ? "pending" : "all"))
+            }
+          >
+            <Text className="text-primary font-medium text-sm">
+              {filterStatus === "all" ? "Show All" : "Pending Only"}
+            </Text>
+          </TouchableOpacity>
+        </View>
+        {/* Tasks List */}
+        {filteredTasks.length === 0 ? (
+          <View className="items-center justify-center py-10 opacity-50">
+            <Ionicons
+              name="leaf-outline"
+              size={48}
+              color={isDark ? "#555" : "#ccc"}
+            />
             <Text
-              className={`text-lg ${isDark ? "text-gray-400" : "text-gray-500"}`}
+              className={`mt-2 ${isDark ? "text-zinc-500" : "text-zinc-400"}`}
             >
-              {filterStatus !== "all"
-                ? `No ${filterStatus} items found 🔍`
-                : activeTab === "tasks"
-                  ? "No tasks for today! 🌤️"
-                  : "No routines set! 🌱"}
+              No tasks found. Enjoy your day!
             </Text>
           </View>
-        }
-        contentContainerStyle={{ paddingVertical: 10, paddingBottom: 100 }}
-      />
-      <TouchableOpacity
-        className="absolute bottom-6 right-6 bg-primary w-16 h-16 rounded-full justify-center items-center shadow-lg shadow-indigo-500/50"
-        onPress={() =>
-          navigation.navigate("AddTodo", {
-            type: activeTab === "habits" ? "routine" : "task",
-          })
-        }
-        style={
-          Platform.OS === "ios"
-            ? {
-                shadowColor: "#4f46e5",
-                shadowOffset: { width: 0, height: 4 },
-                shadowOpacity: 0.3,
-                shadowRadius: 8,
-              }
-            : { elevation: 8 }
-        }
-      >
-        <Ionicons name="add" size={32} color="#fff" />
-      </TouchableOpacity>
+        ) : (
+          <FlatList
+            data={filteredTasks}
+            keyExtractor={(item) => item._id}
+            renderItem={renderTaskItem}
+            scrollEnabled={false} // Let parent ScrollView handle it
+          />
+        )}
+      </ScrollView>
+
       <CustomAlert {...alertProps} />
     </SafeAreaView>
   );

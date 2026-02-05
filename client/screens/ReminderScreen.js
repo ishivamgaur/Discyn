@@ -6,19 +6,24 @@ import {
   Platform,
   Alert,
   TextInput,
+  ScrollView,
+  KeyboardAvoidingView,
 } from "react-native";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import * as Notifications from "expo-notifications";
 import api from "../services/authService";
 import { useTheme } from "../context/ThemeContext";
+import { Ionicons } from "@expo/vector-icons";
+import { SafeAreaView } from "react-native-safe-area-context";
 
-export default function ReminderScreen() {
+export default function ReminderScreen({ navigation }) {
   const { isDark } = useTheme();
   const [date, setDate] = useState(new Date());
   const [showPicker, setShowPicker] = useState(false);
   const [mode, setMode] = useState("date");
   const [reminderText, setReminderText] = useState("");
-  const [email, setEmail] = useState(""); // For email notification
+  const [email, setEmail] = useState("");
+  const [loading, setLoading] = useState(false);
 
   const onChange = (event, selectedDate) => {
     const currentDate = selectedDate || date;
@@ -49,7 +54,10 @@ export default function ReminderScreen() {
         },
         trigger,
       });
-      Alert.alert("Success", `Reminder set for ${trigger.toLocaleString()}`);
+      Alert.alert(
+        "Success",
+        `Reminder set for ${trigger.toLocaleTimeString()}`,
+      );
     } catch (e) {
       Alert.alert("Error", "Failed to schedule notification");
     }
@@ -60,6 +68,7 @@ export default function ReminderScreen() {
       Alert.alert("Error", "Please enter an email address");
       return;
     }
+    setLoading(true);
     try {
       await api.post("/send-mail", {
         to: email,
@@ -69,100 +78,162 @@ export default function ReminderScreen() {
       Alert.alert("Success", "Email sent successfully!");
     } catch (e) {
       Alert.alert("Error", "Failed to send email.");
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
-    <View className={`flex-1 p-6 ${isDark ? "bg-gray-900" : "bg-gray-50"}`}>
-      <Text
-        className={`text-2xl font-bold mb-6 ${isDark ? "text-white" : "text-gray-800"}`}
+    <SafeAreaView
+      edges={["top"]}
+      className={`flex-1 ${isDark ? "bg-background-dark" : "bg-background-light"}`}
+    >
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        className={`flex-1 ${isDark ? "bg-background-dark" : "bg-background-light"}`}
       >
-        Set Reminder
-      </Text>
-
-      <TextInput
-        className={`p-4 rounded-lg mb-4 border ${isDark ? "bg-gray-800 border-gray-700 text-white" : "bg-white border-gray-200 text-gray-900"}`}
-        placeholder="Reminder Note..."
-        placeholderTextColor={isDark ? "#9ca3af" : "#6b7280"}
-        value={reminderText}
-        onChangeText={setReminderText}
-      />
-
-      <View className="mb-6">
-        <Text className={`mb-2 ${isDark ? "text-gray-400" : "text-gray-600"}`}>
-          Selected Time:
-        </Text>
-        <Text
-          className={`text-xl font-semibold mb-4 ${isDark ? "text-primary-light" : "text-primary"}`}
-        >
-          {date.toLocaleString()}
-        </Text>
-
-        <View className="flex-row gap-4 mb-4">
-          <TouchableOpacity
-            onPress={() => showMode("date")}
-            className={`p-3 rounded flex-1 items-center ${isDark ? "bg-gray-700" : "bg-gray-200"}`}
+        <ScrollView className="flex-1 p-6">
+          <Text
+            className={`text-3xl font-bold mb-8 ${isDark ? "text-white" : "text-gray-900"}`}
           >
-            <Text className={isDark ? "text-white" : "text-black"}>
-              Pick Date
+            Reminders
+          </Text>
+
+          {/* Note Input */}
+          <View
+            className={`p-4 rounded-2xl mb-6 shadow-sm ${isDark ? "bg-card-dark" : "bg-white"}`}
+          >
+            <View className="flex-row items-center mb-3 gap-2">
+              <Ionicons
+                name="document-text-outline"
+                size={20}
+                color={isDark ? "#a1a1aa" : "#71717a"}
+              />
+              <Text
+                className={`font-semibold ${isDark ? "text-zinc-400" : "text-zinc-500"}`}
+              >
+                NOTE
+              </Text>
+            </View>
+            <TextInput
+              className={`text-base p-0 h-12 font-medium ${isDark ? "text-white" : "text-gray-900"}`}
+              placeholder="Buy groceries..."
+              placeholderTextColor={isDark ? "#52525b" : "#d4d4d8"}
+              value={reminderText}
+              onChangeText={setReminderText}
+            />
+          </View>
+
+          {/* Date Time Picker Block */}
+          <View
+            className={`p-4 rounded-2xl mb-6 shadow-sm ${isDark ? "bg-card-dark" : "bg-white"}`}
+          >
+            <View className="flex-row items-center mb-4 gap-2">
+              <Ionicons
+                name="time-outline"
+                size={20}
+                color={isDark ? "#a1a1aa" : "#71717a"}
+              />
+              <Text
+                className={`font-semibold ${isDark ? "text-zinc-400" : "text-zinc-500"}`}
+              >
+                TIME
+              </Text>
+            </View>
+
+            <View className="flex-row items-center justify-between mb-4">
+              <Text
+                className={`text-2xl font-bold ${isDark ? "text-white" : "text-gray-900"}`}
+              >
+                {date.toLocaleTimeString([], {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })}
+              </Text>
+              <Text
+                className={`text-base font-medium ${isDark ? "text-zinc-400" : "text-zinc-500"}`}
+              >
+                {date.toLocaleDateString()}
+              </Text>
+            </View>
+
+            <View className="flex-row gap-3">
+              <TouchableOpacity
+                onPress={() => showMode("date")}
+                className={`flex-1 p-3 rounded-xl items-center border ${isDark ? "border-zinc-700 bg-zinc-800" : "border-zinc-200 bg-zinc-50"}`}
+              >
+                <Text
+                  className={`font-bold ${isDark ? "text-white" : "text-gray-700"}`}
+                >
+                  Change Date
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => showMode("time")}
+                className={`flex-1 p-3 rounded-xl items-center border ${isDark ? "border-zinc-700 bg-zinc-800" : "border-zinc-200 bg-zinc-50"}`}
+              >
+                <Text
+                  className={`font-bold ${isDark ? "text-white" : "text-gray-700"}`}
+                >
+                  Change Time
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {showPicker && (
+              <DateTimePicker
+                testID="dateTimePicker"
+                value={date}
+                mode={mode}
+                is24Hour={true}
+                display="default"
+                onChange={onChange}
+                themeVariant={isDark ? "dark" : "light"}
+              />
+            )}
+          </View>
+
+          {/* Set Notification Button */}
+          <TouchableOpacity
+            onPress={scheduleNotification}
+            className="bg-primary p-4 rounded-xl flex-row items-center justify-center mb-8 shadow-lg shadow-blue-500/30"
+          >
+            <Ionicons name="notifications" size={20} color="white" />
+            <Text className="text-white font-bold text-lg ml-2">
+              Schedule Notification
             </Text>
           </TouchableOpacity>
-          <TouchableOpacity
-            onPress={() => showMode("time")}
-            className={`p-3 rounded flex-1 items-center ${isDark ? "bg-gray-700" : "bg-gray-200"}`}
+
+          {/* Email Section */}
+          <View
+            className={`p-4 rounded-2xl mb-8 border border-dashed ${isDark ? "border-zinc-700 bg-zinc-900/50" : "border-zinc-300 bg-zinc-50"}`}
           >
-            <Text className={isDark ? "text-white" : "text-black"}>
-              Pick Time
+            <Text
+              className={`font-bold mb-4 ${isDark ? "text-zinc-300" : "text-zinc-600"}`}
+            >
+              EMAIL REMINDER
             </Text>
-          </TouchableOpacity>
-        </View>
-
-        {showPicker && (
-          <DateTimePicker
-            testID="dateTimePicker"
-            value={date}
-            mode={mode}
-            is24Hour={true}
-            display="default"
-            onChange={onChange}
-            themeVariant={isDark ? "dark" : "light"}
-          />
-        )}
-      </View>
-
-      <TouchableOpacity
-        className="bg-primary p-4 rounded-lg items-center mb-8"
-        onPress={scheduleNotification}
-      >
-        <Text className="text-white font-bold text-lg">
-          Set Local Notification
-        </Text>
-      </TouchableOpacity>
-
-      <View
-        className={`border-t pt-6 ${isDark ? "border-gray-700" : "border-gray-300"}`}
-      >
-        <Text
-          className={`text-xl font-bold mb-4 ${isDark ? "text-white" : "text-gray-800"}`}
-        >
-          Email Notification
-        </Text>
-        <TextInput
-          className={`p-4 rounded-lg mb-4 border ${isDark ? "bg-gray-800 border-gray-700 text-white" : "bg-white border-gray-200 text-gray-900"}`}
-          placeholder="Enter Email Address"
-          placeholderTextColor={isDark ? "#9ca3af" : "#6b7280"}
-          value={email}
-          onChangeText={setEmail}
-          keyboardType="email-address"
-          autoCapitalize="none"
-        />
-        <TouchableOpacity
-          className="bg-success p-4 rounded-lg items-center"
-          onPress={sendEmailReminder}
-        >
-          <Text className="text-white font-bold text-lg">Send Email Now</Text>
-        </TouchableOpacity>
-      </View>
-    </View>
+            <TextInput
+              className={`p-4 rounded-xl mb-4 border ${isDark ? "bg-background-dark border-zinc-700 text-white" : "bg-white border-zinc-200 text-gray-900"}`}
+              placeholder="Enter Email Address"
+              placeholderTextColor={isDark ? "#52525b" : "#a1a1aa"}
+              value={email}
+              onChangeText={setEmail}
+              keyboardType="email-address"
+              autoCapitalize="none"
+            />
+            <TouchableOpacity
+              onPress={sendEmailReminder}
+              disabled={loading}
+              className={`p-4 rounded-xl items-center ${loading ? "bg-green-600" : "bg-green-500"}`}
+            >
+              <Text className="text-white font-bold text-lg">
+                {loading ? "Sending..." : "Send Email"}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }

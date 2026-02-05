@@ -12,26 +12,36 @@ module.exports = {
     extend: {
       colors: {
         primary: {
-          DEFAULT: "#4f46e5", // indigo-600
-          light: "#6366f1", // indigo-500
-          dark: "#4338ca", // indigo-700
+          DEFAULT: "#2563eb", // blue-600 (More vivid than indigo)
+          light: "#3b82f6", // blue-500
+          dark: "#1d4ed8", // blue-700
         },
-        secondary: "#f97316", // orange-500
-        danger: "#ef4444", // red-500
-        success: "#22c55e", // green-500
         background: {
-          light: "#f9fafb", // gray-50
-          dark: "#111827", // gray-900
+          light: "#ffffff", // Pure white for cleaner look
+          dark: "#09090b", // zinc-950 (Deep, premium dark)
+          subtle: "#f4f4f5", // zinc-100 (for secondary backgrounds)
+          "subtle-dark": "#18181b", // zinc-900
         },
         card: {
           light: "#ffffff",
-          dark: "#1f2937", // gray-800
+          dark: "#18181b", // zinc-900
+          "highlight-dark": "#27272a", // zinc-800
         },
         text: {
-          light: "#111827", // gray-900
-          dark: "#f9fafb", // gray-50
-          muted: "#9ca3af", // gray-400
+          light: "#09090b", // zinc-950
+          dark: "#fafafa", // zinc-50
+          muted: "#71717a", // zinc-500
+          "muted-dark": "#a1a1aa", // zinc-400
         },
+        border: {
+          light: "#e4e4e7", // zinc-200
+          dark: "#27272a", // zinc-800
+        },
+      },
+      borderRadius: {
+        xl: "12px",
+        "2xl": "16px",
+        "3xl": "24px",
       },
     },
   },
