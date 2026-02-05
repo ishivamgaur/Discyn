@@ -12,6 +12,7 @@ import * as SystemUI from "expo-system-ui";
 import { Platform, View, ActivityIndicator, StatusBar } from "react-native";
 import { loadUser } from "./services/authService";
 import { ThemeProvider, useTheme } from "./context/ThemeContext";
+import { ToastProvider } from "./context/ToastContext";
 import { Ionicons } from "@expo/vector-icons";
 
 import HomeScreen from "./screens/HomeScreen";
@@ -300,7 +301,9 @@ function AppContent() {
 export default function App() {
   return (
     <ThemeProvider>
-      <AppContent />
+      <ToastProvider>
+        <AppContent />
+      </ToastProvider>
     </ThemeProvider>
   );
 }
