@@ -6,9 +6,9 @@ import { Platform } from "react-native";
 // Handle API_URL for Web vs Native
 const getApiUrl = () => {
   if (Platform.OS === "web") {
-    return "http://localhost:3000"; // Web uses localhost
+    return "http://localhost:5000"; // Web uses localhost
   }
-  return "http://192.168.1.160:3000"; // LAN IP for physical device
+  return "https://discyn.onrender.com"; // Production Render URL
 };
 
 const API_URL = getApiUrl();

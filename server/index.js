@@ -21,6 +21,15 @@ app.use(express.json());
 app.use("/api/users", userRoutes);
 app.use("/", todoRoutes);
 
+// Health Check
+app.get("/health", (req, res) => {
+  res.json({
+    success: true,
+    message: "Server is running",
+    timestamp: new Date().toISOString(),
+  });
+});
+
 // Error Middleware
 app.use(errorHandler);
 
