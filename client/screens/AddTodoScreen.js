@@ -11,11 +11,18 @@ import {
   KeyboardAvoidingView,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import DateTimePicker from "@react-native-community/datetimepicker";
+import Slider from "@react-native-community/slider";
 import api from "../services/authService";
 import haptics from "../services/hapticsService";
 import { useTheme } from "../context/ThemeContext";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { handleTaskScheduling } from "../services/notificationService";
+
+// Only import DateTimePicker on mobile platforms
+let DateTimePicker = null;
+if (Platform.OS !== "web") {
+  DateTimePicker = require("@react-native-community/datetimepicker").default;
+}
 
 export default function AddTodoScreen({ navigation, route }) {
   const { isDark } = useTheme();
@@ -32,7 +39,8 @@ export default function AddTodoScreen({ navigation, route }) {
   const [duration, setDuration] = useState(30); // minutes
 
   const [isNagging, setIsNagging] = useState(false);
-  const [nagInterval, setNagInterval] = useState(5); // minutes
+  const [nagInterval, setNagInterval] = useState(5); // minutes between reminders
+  const [nagDuration, setNagDuration] = useState(60); // total minutes to keep nagging
 
   // UI State
   const [showTimePicker, setShowTimePicker] = useState(false);
@@ -55,14 +63,24 @@ export default function AddTodoScreen({ navigation, route }) {
         isRecurring,
         priority,
         // Phase 4 Fields
-        scheduledTime: hasSchedule ? scheduledTime : null,
+        // Safety: If Nagging is on, we MUST have a scheduled time.
+        scheduledTime: hasSchedule || isNagging ? scheduledTime : null,
         duration: hasSchedule ? duration : 30,
         reminderType: isNagging ? "NAGGING" : "NORMAL",
         nagInterval: isNagging ? nagInterval : 5,
+        nagDuration: isNagging ? nagDuration : 60, // How long to keep nagging
         type: isRecurring ? "ROUTINE" : "TASK",
       };
 
-      await api.post("/todos", payload);
+      const response = await api.post("/todos", payload);
+
+      try {
+        await handleTaskScheduling(response.data);
+      } catch (scheduleError) {
+        console.error("Scheduling failed:", scheduleError);
+        // Don't block success flow, just log
+      }
+
       haptics.success();
       navigation.goBack();
     } catch (error) {
@@ -233,7 +251,10 @@ export default function AddTodoScreen({ navigation, route }) {
               </View>
               <Switch
                 value={hasSchedule}
-                onValueChange={setHasSchedule}
+                onValueChange={(val) => {
+                  setHasSchedule(val);
+                  if (!val) setIsNagging(false); // Auto-disable Nag if schedule off
+                }}
                 trackColor={{ false: "#e4e4e7", true: "#a855f7" }}
               />
             </View>
@@ -262,7 +283,34 @@ export default function AddTodoScreen({ navigation, route }) {
                   </Text>
                 </TouchableOpacity>
 
-                {showTimePicker && (
+                {/* Web: Use HTML time input */}
+                {Platform.OS === "web" && (
+                  <input
+                    type="time"
+                    value={`${String(scheduledTime.getHours()).padStart(2, "0")}:${String(scheduledTime.getMinutes()).padStart(2, "0")}`}
+                    onChange={(e) => {
+                      const newDate = new Date(scheduledTime);
+                      const [hours, minutes] = e.target.value.split(":");
+                      newDate.setHours(parseInt(hours), parseInt(minutes));
+                      setScheduledTime(newDate);
+                    }}
+                    style={{
+                      width: "100%",
+                      padding: 12,
+                      borderRadius: 8,
+                      border: isDark
+                        ? "1px solid #3f3f46"
+                        : "1px solid #e4e4e7",
+                      backgroundColor: isDark ? "#27272a" : "#f4f4f5",
+                      color: isDark ? "#fff" : "#000",
+                      fontSize: 16,
+                      marginTop: 8,
+                    }}
+                  />
+                )}
+
+                {/* Mobile: Use native DateTimePicker */}
+                {Platform.OS !== "web" && showTimePicker && DateTimePicker && (
                   <DateTimePicker
                     value={scheduledTime}
                     mode="time"
@@ -273,38 +321,33 @@ export default function AddTodoScreen({ navigation, route }) {
                   />
                 )}
 
-                <View className="flex-row justify-between items-center">
-                  <Text
-                    className={`text-sm ${isDark ? "text-zinc-400" : "text-zinc-500"}`}
-                  >
-                    Duration
-                  </Text>
-                  <View className="flex-row items-center gap-2">
-                    <TouchableOpacity
-                      onPress={() => setDuration(Math.max(15, duration - 15))}
-                      className="p-1 bg-zinc-200 dark:bg-zinc-700 rounded"
-                    >
-                      <Ionicons
-                        name="remove"
-                        size={16}
-                        color={isDark ? "#fff" : "#000"}
-                      />
-                    </TouchableOpacity>
+                <View className="mt-4">
+                  <View className="flex-row justify-between items-center mb-2">
                     <Text
-                      className={`text-base font-bold min-w-[50px] text-center ${isDark ? "text-white" : "text-black"}`}
+                      className={`text-sm ${isDark ? "text-zinc-400" : "text-zinc-500"}`}
+                    >
+                      Duration
+                    </Text>
+                    <Text
+                      className={`text-base font-bold ${isDark ? "text-white" : "text-black"}`}
                     >
                       {duration}m
                     </Text>
-                    <TouchableOpacity
-                      onPress={() => setDuration(duration + 15)}
-                      className="p-1 bg-zinc-200 dark:bg-zinc-700 rounded"
-                    >
-                      <Ionicons
-                        name="add"
-                        size={16}
-                        color={isDark ? "#fff" : "#000"}
-                      />
-                    </TouchableOpacity>
+                  </View>
+                  <Slider
+                    style={{ width: "100%", height: 40 }}
+                    minimumValue={5}
+                    maximumValue={180}
+                    step={5}
+                    value={duration}
+                    onValueChange={(val) => setDuration(val)}
+                    minimumTrackTintColor="#10b981"
+                    maximumTrackTintColor={isDark ? "#3f3f46" : "#e4e4e7"}
+                    thumbTintColor="#10b981"
+                  />
+                  <View className="flex-row justify-between">
+                    <Text className="text-xs text-zinc-500">5m</Text>
+                    <Text className="text-xs text-zinc-500">3h</Text>
                   </View>
                 </View>
               </View>
@@ -333,10 +376,82 @@ export default function AddTodoScreen({ navigation, route }) {
               </View>
               <Switch
                 value={isNagging}
-                onValueChange={setIsNagging}
+                onValueChange={(val) => {
+                  setIsNagging(val);
+                  if (val && !hasSchedule) {
+                    setHasSchedule(true);
+                  }
+                }}
                 trackColor={{ false: "#e4e4e7", true: "#ef4444" }}
               />
             </View>
+
+            {/* Nag Interval Slider - Shows when Nag Me is enabled */}
+            {isNagging && (
+              <View
+                className={`p-4 pt-0 ${isDark ? "bg-zinc-800/50" : "bg-zinc-50"}`}
+              >
+                {/* Nag Frequency Slider */}
+                <View className="flex-row justify-between items-center mb-2">
+                  <Text
+                    className={`text-sm ${isDark ? "text-zinc-400" : "text-zinc-500"}`}
+                  >
+                    Nag Every
+                  </Text>
+                  <Text
+                    className={`text-base font-bold ${isDark ? "text-white" : "text-black"}`}
+                  >
+                    {nagInterval} min
+                  </Text>
+                </View>
+                <Slider
+                  style={{ width: "100%", height: 40 }}
+                  minimumValue={1}
+                  maximumValue={60}
+                  step={1}
+                  value={nagInterval}
+                  onValueChange={(val) => setNagInterval(val)}
+                  minimumTrackTintColor="#ef4444"
+                  maximumTrackTintColor={isDark ? "#3f3f46" : "#e4e4e7"}
+                  thumbTintColor="#ef4444"
+                />
+                <View className="flex-row justify-between mb-6">
+                  <Text className="text-xs text-zinc-500">1 min</Text>
+                  <Text className="text-xs text-zinc-500">60 min</Text>
+                </View>
+
+                {/* Nag Duration Slider */}
+                <View className="flex-row justify-between items-center mb-2">
+                  <Text
+                    className={`text-sm ${isDark ? "text-zinc-400" : "text-zinc-500"}`}
+                  >
+                    Stop After
+                  </Text>
+                  <Text
+                    className={`text-base font-bold ${isDark ? "text-white" : "text-black"}`}
+                  >
+                    {nagDuration < 60
+                      ? `${nagDuration} min`
+                      : `${Math.floor(nagDuration / 60)}h ${nagDuration % 60 > 0 ? (nagDuration % 60) + "m" : ""}`}
+                  </Text>
+                </View>
+                <Slider
+                  style={{ width: "100%", height: 40 }}
+                  minimumValue={15}
+                  maximumValue={240}
+                  step={15}
+                  value={nagDuration}
+                  onValueChange={(val) => setNagDuration(val)}
+                  minimumTrackTintColor="#7c3aed"
+                  maximumTrackTintColor={isDark ? "#3f3f46" : "#e4e4e7"}
+                  thumbTintColor="#7c3aed"
+                />
+                <View className="flex-row justify-between">
+                  <Text className="text-xs text-zinc-500">15 min</Text>
+                  <Text className="text-xs text-zinc-500">4 hours</Text>
+                </View>
+              </View>
+            )}
           </View>
         </ScrollView>
       </KeyboardAvoidingView>

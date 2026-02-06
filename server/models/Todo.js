@@ -78,6 +78,10 @@ const todoSchema = new mongoose.Schema(
       type: Number, // in minutes (e.g. 2, 5, 10)
       default: 5,
     },
+    nagDuration: {
+      type: Number, // in minutes (e.g. 60 for 1 hour)
+      default: 60,
+    },
 
     // 3. Focus Timer
     timeSpent: {

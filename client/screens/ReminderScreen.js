@@ -10,12 +10,17 @@ import {
   KeyboardAvoidingView,
   Switch,
 } from "react-native";
-import DateTimePicker from "@react-native-community/datetimepicker";
 import * as Notifications from "expo-notifications";
 import api from "../services/authService";
 import { useTheme } from "../context/ThemeContext";
 import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
+
+// Only import DateTimePicker on mobile platforms
+let DateTimePicker = null;
+if (Platform.OS !== "web") {
+  DateTimePicker = require("@react-native-community/datetimepicker").default;
+}
 
 export default function ReminderScreen({ navigation }) {
   const { isDark } = useTheme();
@@ -40,15 +45,6 @@ export default function ReminderScreen({ navigation }) {
   };
 
   const scheduleNotification = async () => {
-    // Notifications don't work on web
-    if (Platform.OS === "web") {
-      Alert.alert(
-        "Not Supported",
-        "Push notifications are not available on web. Please use the mobile app.",
-      );
-      return;
-    }
-
     const trigger = new Date(date);
     trigger.setSeconds(0);
 
@@ -57,9 +53,56 @@ export default function ReminderScreen({ navigation }) {
       return;
     }
 
+    // Web simulation mode - use setTimeout + alert
+    if (Platform.OS === "web") {
+      const msUntilTrigger = trigger.getTime() - Date.now();
+
+      console.log("=== WEB NOTIFICATION TEST ===");
+      console.log("Trigger time:", trigger.toLocaleTimeString());
+      console.log("Current time:", new Date().toLocaleTimeString());
+      console.log("Ms until trigger:", msUntilTrigger);
+      console.log("Repeat enabled:", repeatEnabled);
+      console.log("Repeat interval:", repeatInterval, "minutes");
+
+      // Show confirmation alert
+      window.alert(
+        `✅ Web Test Mode\n\nNotification will appear in ${Math.round(msUntilTrigger / 1000)} seconds!\n\nKeep this tab open and wait...`,
+      );
+
+      // Simulate first notification
+      const timeoutId = setTimeout(() => {
+        console.log("FIRING NOTIFICATION NOW!");
+        window.alert(
+          `🔔 NOTIFICATION!\n\n${reminderText || "Here is your scheduled reminder!"}`,
+        );
+
+        // If repeat is enabled, start repeating
+        if (repeatEnabled) {
+          console.log("Starting repeat interval...");
+          const intervalId = setInterval(
+            () => {
+              console.log("FIRING REPEAT NOTIFICATION!");
+              window.alert(
+                `🔔 REPEAT!\n\n${reminderText || "Reminder again!"}`,
+              );
+            },
+            repeatInterval * 60 * 1000,
+          );
+          window._notificationInterval = intervalId;
+        }
+      }, msUntilTrigger);
+
+      window._notificationTimeout = timeoutId;
+      console.log("Timeout scheduled with ID:", timeoutId);
+
+      return;
+    }
+
     try {
       // Request permissions first
       const { status } = await Notifications.requestPermissionsAsync();
+      console.log("Notification permission status:", status);
+
       if (status !== "granted") {
         Alert.alert(
           "Permission Required",
@@ -68,26 +111,55 @@ export default function ReminderScreen({ navigation }) {
         return;
       }
 
+      let notificationId;
+
       if (repeatEnabled) {
-        // For repeating notifications, use seconds-based trigger
-        await Notifications.scheduleNotificationAsync({
+        // Calculate seconds from now until the scheduled start time
+        const secondsUntilStart = Math.max(
+          Math.floor((trigger.getTime() - Date.now()) / 1000),
+          60, // Minimum 1 minute
+        );
+
+        // First, schedule the initial notification at the selected time
+        notificationId = await Notifications.scheduleNotificationAsync({
           content: {
             title: "Reminder ⏰",
             body: reminderText || "Here is your scheduled reminder!",
             sound: "default",
           },
           trigger: {
-            seconds: repeatInterval * 60,
-            repeats: true,
+            seconds: secondsUntilStart,
+            repeats: false, // First one doesn't repeat
           },
         });
+
+        // Then, schedule the repeating notification starting after the first one
+        const repeatNotificationId =
+          await Notifications.scheduleNotificationAsync({
+            content: {
+              title: "Reminder ⏰ (Repeat)",
+              body: reminderText || "Here is your scheduled reminder!",
+              sound: "default",
+            },
+            trigger: {
+              seconds: secondsUntilStart + repeatInterval * 60, // Start after first + interval
+              repeats: true,
+            },
+          });
+
+        console.log("Scheduled initial notification ID:", notificationId);
+        console.log(
+          "Scheduled repeating notification ID:",
+          repeatNotificationId,
+        );
+
         Alert.alert(
-          "Success",
-          `Repeating reminder set! Will notify every ${repeatInterval} minutes.`,
+          "✅ Reminder Scheduled!",
+          `First reminder at ${trigger.toLocaleTimeString()}, then every ${repeatInterval} minutes`,
         );
       } else {
         // One-time notification with correct date trigger format
-        await Notifications.scheduleNotificationAsync({
+        notificationId = await Notifications.scheduleNotificationAsync({
           content: {
             title: "Reminder ⏰",
             body: reminderText || "Here is your scheduled reminder!",
@@ -97,11 +169,20 @@ export default function ReminderScreen({ navigation }) {
             date: trigger,
           },
         });
+        console.log("Scheduled one-time notification ID:", notificationId);
         Alert.alert(
-          "Success",
-          `Reminder set for ${trigger.toLocaleTimeString()}`,
+          "✅ Reminder Scheduled!",
+          `Will notify at ${trigger.toLocaleTimeString()}\n\nNotification ID: ${notificationId}`,
         );
       }
+
+      // Log all scheduled notifications for debugging
+      const scheduledNotifications =
+        await Notifications.getAllScheduledNotificationsAsync();
+      console.log(
+        "All scheduled notifications:",
+        scheduledNotifications.length,
+      );
     } catch (e) {
       console.error("Notification error:", e);
       Alert.alert("Error", "Failed to schedule notification: " + e.message);
@@ -225,7 +306,56 @@ export default function ReminderScreen({ navigation }) {
               </TouchableOpacity>
             </View>
 
-            {showPicker && (
+            {/* Web: Use HTML inputs */}
+            {Platform.OS === "web" && (
+              <View className="flex-row gap-3 mt-4">
+                <input
+                  type="date"
+                  value={date.toISOString().split("T")[0]}
+                  onChange={(e) => {
+                    const newDate = new Date(date);
+                    const [year, month, day] = e.target.value.split("-");
+                    newDate.setFullYear(
+                      parseInt(year),
+                      parseInt(month) - 1,
+                      parseInt(day),
+                    );
+                    setDate(newDate);
+                  }}
+                  style={{
+                    flex: 1,
+                    padding: 12,
+                    borderRadius: 12,
+                    border: isDark ? "1px solid #3f3f46" : "1px solid #e4e4e7",
+                    backgroundColor: isDark ? "#27272a" : "#f4f4f5",
+                    color: isDark ? "#fff" : "#000",
+                    fontSize: 16,
+                  }}
+                />
+                <input
+                  type="time"
+                  value={`${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`}
+                  onChange={(e) => {
+                    const newDate = new Date(date);
+                    const [hours, minutes] = e.target.value.split(":");
+                    newDate.setHours(parseInt(hours), parseInt(minutes));
+                    setDate(newDate);
+                  }}
+                  style={{
+                    flex: 1,
+                    padding: 12,
+                    borderRadius: 12,
+                    border: isDark ? "1px solid #3f3f46" : "1px solid #e4e4e7",
+                    backgroundColor: isDark ? "#27272a" : "#f4f4f5",
+                    color: isDark ? "#fff" : "#000",
+                    fontSize: 16,
+                  }}
+                />
+              </View>
+            )}
+
+            {/* Mobile: Use native DateTimePicker */}
+            {Platform.OS !== "web" && showPicker && DateTimePicker && (
               <DateTimePicker
                 testID="dateTimePicker"
                 value={date}

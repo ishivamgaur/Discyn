@@ -167,7 +167,9 @@ export default function TodoDetailScreen({ route, navigation }) {
           </View>
 
           {/* Schedule Info Card */}
-          {(todo.scheduledTime || todo.type === "ROUTINE") && (
+          {(todo.scheduledTime ||
+            todo.type === "ROUTINE" ||
+            todo.reminderType === "NAGGING") && (
             <View
               className={`p-4 rounded-2xl mb-6 ${isDark ? "bg-card-dark" : "bg-white"}`}
             >
@@ -218,6 +220,22 @@ export default function TodoDetailScreen({ route, navigation }) {
                   </Text>
                   <Text className="text-red-500">
                     Every {todo.nagInterval || 5}m
+                  </Text>
+                </View>
+              )}
+
+              {/* Nag Duration Display */}
+              {todo.reminderType === "NAGGING" && todo.nagDuration && (
+                <View className="flex-row justify-between mb-2">
+                  <Text className={isDark ? "text-zinc-400" : "text-zinc-500"}>
+                    Stop After
+                  </Text>
+                  <Text
+                    className={`font-medium ${isDark ? "text-zinc-200" : "text-zinc-800"}`}
+                  >
+                    {todo.nagDuration < 60
+                      ? `${todo.nagDuration} min`
+                      : `${Math.floor(todo.nagDuration / 60)}h ${todo.nagDuration % 60 > 0 ? (todo.nagDuration % 60) + "m" : ""}`}
                   </Text>
                 </View>
               )}

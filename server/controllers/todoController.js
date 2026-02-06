@@ -47,6 +47,7 @@ export const createTodo = asyncHandler(async (req, res) => {
     duration,
     reminderType,
     nagInterval,
+    nagDuration,
   } = req.body;
 
   // Industry Standard: Map boolean to explicit ENUM type
@@ -64,6 +65,7 @@ export const createTodo = asyncHandler(async (req, res) => {
     duration: duration || 30, // Default 30m
     reminderType: reminderType || "NORMAL",
     nagInterval: nagInterval || 5, // Default 5m
+    nagDuration: nagDuration || 60, // Default 60m
     user: req.user._id,
   });
 
