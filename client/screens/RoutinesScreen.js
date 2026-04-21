@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from "react";
+import React from "react";
 import {
   View,
   Text,
@@ -7,157 +7,77 @@ import {
   RefreshControl,
   LayoutAnimation,
   Platform,
-  UIManager,
-  Image,
 } from "react-native";
-import { useFocusEffect } from "@react-navigation/native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
-import { useTheme } from "../context/ThemeContext";
-import api from "../services/authService";
-import haptics from "../services/hapticsService";
-import { useCustomAlert } from "../hooks/useCustomAlert";
-import CustomAlert from "../components/CustomAlert";
-
-if (
-  Platform.OS === "android" &&
-  UIManager.setLayoutAnimationEnabledExperimental
-) {
-  UIManager.setLayoutAnimationEnabledExperimental(true);
-}
+import { useTodos, useToggleComplete } from "../hooks/useTodos";
+import { BlurView } from "expo-blur";
 
 export default function RoutinesScreen({ navigation }) {
-  const { isDark } = useTheme();
-  const [routines, setRoutines] = useState([]);
-  const [refreshing, setRefreshing] = useState(false);
-  const { alertProps, showAlert } = useCustomAlert();
+  const { data: todos = [], isRefetching, refetch } = useTodos();
+  const toggleCompleteMutation = useToggleComplete();
 
-  const fetchRoutines = async () => {
-    try {
-      const response = await api.get("/todos");
-      // Filter client-side for now, or add a query param to API
-      const allTodos = response.data;
-      const routineList = allTodos.filter(
-        (t) => t.type === "ROUTINE" || t.isRecurring,
-      );
-      setRoutines(routineList);
-    } catch (error) {
-      console.error(error);
-    }
-  };
+  const routines = todos.filter((t) => t.type === "ROUTINE" || t.isRecurring);
 
-  const onRefresh = useCallback(() => {
-    setRefreshing(true);
-    fetchRoutines().finally(() => setRefreshing(false));
-  }, []);
-
-  useFocusEffect(
-    useCallback(() => {
-      fetchRoutines();
-    }, []),
-  );
-
-  const toggleRoutine = async (item) => {
-    try {
-      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-
-      // Optimistic Update
-      const newStatus = !item.isCompleted;
-      setRoutines((prev) =>
-        prev.map((r) =>
-          r._id === item._id ? { ...r, isCompleted: newStatus } : r,
-        ),
-      );
-
-      if (newStatus) {
-        haptics.success();
-      } else {
-        haptics.light();
-      }
-
-      await api.put(`/todos/${item._id}`, { isCompleted: newStatus });
-      fetchRoutines(); // Sync
-    } catch (error) {
-      fetchRoutines(); // Revert
-      haptics.error();
-    }
+  const toggleRoutine = (item) => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    toggleCompleteMutation.mutate(item._id);
   };
 
   const renderRoutineItem = ({ item }) => {
     return (
       <TouchableOpacity
+        key={item._id}
         activeOpacity={0.7}
-        onPress={() => navigation.navigate("TodoDetail", { todo: item })}
-        className={`flex-row items-center p-4 mb-3 rounded-xl border ${isDark ? "bg-card-dark border-zinc-800" : "bg-white border-zinc-200"}`}
+        onPress={() => navigation.navigate("TodoDetail", { id: item._id })}
+        className="flex-row items-center p-5 mb-4 rounded-3xl bg-white/5 border border-white/10"
       >
-        {/* Rectangular Checkbox */}
         <TouchableOpacity
           onPress={() => toggleRoutine(item)}
-          className={`w-6 h-6 mr-4 rounded-md border-2 items-center justify-center ${
-            item.isCompleted
-              ? "bg-purple-500 border-purple-500"
-              : isDark
-                ? "border-zinc-600"
-                : "border-zinc-400"
+          className={`w-7 h-7 mr-4 rounded-xl border-2 items-center justify-center ${
+            item.isCompleted ? "bg-secondary border-secondary" : "border-border-dark"
           }`}
         >
-          {item.isCompleted && (
-            <Ionicons name="checkmark" size={16} color="white" />
-          )}
+          {item.isCompleted && <Ionicons name="checkmark" size={18} color="#0b0e14" />}
         </TouchableOpacity>
 
         <View className="flex-1">
           <Text
-            className={`text-base font-semibold ${item.isCompleted ? (isDark ? "text-zinc-500 decoration-zinc-500 line-through" : "text-zinc-400 decoration-zinc-400 line-through") : isDark ? "text-white" : "text-zinc-900"}`}
+            className={`text-lg font-display tracking-wide ${
+              item.isCompleted ? "text-text-muted-dark line-through" : "text-white"
+            }`}
           >
             {item.title}
           </Text>
-          {item.description ? (
-            <Text
-              numberOfLines={1}
-              className={`text-xs mt-0.5 ${isDark ? "text-zinc-500" : "text-zinc-500"}`}
-            >
-              {item.description}
-            </Text>
-          ) : null}
         </View>
 
-        {/* Sync Icon or Streak/Info */}
-        <View className="w-8 h-8 rounded-full bg-zinc-100 dark:bg-zinc-800 items-center justify-center">
-          <Ionicons
-            name="repeat"
-            size={14}
-            color={isDark ? "#a1a1aa" : "#71717a"}
-          />
+        <View className="w-10 h-10 rounded-full bg-primary/20 items-center justify-center ml-2">
+          <Ionicons name="repeat" size={18} color="#c799ff" />
         </View>
       </TouchableOpacity>
     );
   };
 
   return (
-    <SafeAreaView
-      edges={["top"]}
-      className={`flex-1 ${isDark ? "bg-background-dark" : "bg-background-light"}`}
-    >
-      <View className="px-6 py-4 flex-row justify-between items-center">
+    <SafeAreaView edges={["top"]} className="flex-1 bg-background-dark">
+      <View className="px-4 pt-4 pb-10 flex-row justify-between items-center">
         <View>
-          <Text
-            className={`text-3xl font-bold ${isDark ? "text-white" : "text-black"}`}
-          >
-            Routines
+          <Text className="text-sm font-label text-secondary uppercase tracking-widest mb-1">
+            Build Habits
           </Text>
-          <Text
-            className={`text-sm font-medium ${isDark ? "text-zinc-400" : "text-zinc-500"}`}
-          >
-            Build better habits
+          <Text className="text-4xl font-display text-white tracking-tight">
+            Routines
           </Text>
         </View>
 
         <TouchableOpacity
           onPress={() => navigation.navigate("AddTodo", { type: "routine" })}
-          className={`w-10 h-10 rounded-xl items-center justify-center bg-purple-600`}
+          className="w-12 h-12 rounded-2xl items-center justify-center bg-primary"
+          style={{
+            shadowColor: "#c799ff", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.6, shadowRadius: 12, elevation: 8
+          }}
         >
-          <Ionicons name="add" size={24} color="white" />
+          <Ionicons name="add" size={28} color="#0b0e14" />
         </TouchableOpacity>
       </View>
 
@@ -165,31 +85,17 @@ export default function RoutinesScreen({ navigation }) {
         data={routines}
         keyExtractor={(item) => item._id}
         renderItem={renderRoutineItem}
-        contentContainerStyle={{ padding: 24 }}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            tintColor={isDark ? "#fff" : "#000"}
-          />
-        }
-        ListEmptyState={() => (
+        contentContainerStyle={{ padding: 16, paddingBottom: 100 }}
+        refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor="#00e3fd" />}
+        ListEmptyComponent={() => (
           <View className="items-center justify-center mt-20 opacity-50">
-            <Ionicons
-              name="repeat"
-              size={64}
-              color={isDark ? "#333" : "#ddd"}
-            />
-            <Text
-              className={`mt-4 text-center ${isDark ? "text-zinc-500" : "text-zinc-400"}`}
-            >
-              No routines found.{"\n"}Start building a habit!
+            <Ionicons name="infinite" size={64} color="#45484f" />
+            <Text className="mt-4 text-center font-body text-text-muted-dark text-lg">
+              No routines yet.{"\n"}Initialize a new sequence.
             </Text>
           </View>
         )}
       />
-
-      <CustomAlert {...alertProps} />
     </SafeAreaView>
   );
 }

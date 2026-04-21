@@ -284,7 +284,7 @@ export const getStats = asyncHandler(async (req, res) => {
   // 4. completionRate & Total
   // Using simplified counts for speed
   const totalTasksCreated = await Todo.countDocuments({ user: userId });
-  // Total completions (all time events)
+  // Total completions and focus time (all time events)
   const totalAgg = await Todo.aggregate([
     { $match: { user: userId } },
     {
@@ -308,11 +308,39 @@ export const getStats = asyncHandler(async (req, res) => {
             ],
           },
         },
+        timeSpent: { $ifNull: ["$timeSpent", 0] },
       },
     },
-    { $group: { _id: null, total: { $sum: "$totalCount" } } },
+    { $group: { _id: null, total: { $sum: "$totalCount" }, totalTimeSpent: { $sum: "$timeSpent" } } },
   ]);
   const totalCompleted = totalAgg[0]?.total || 0;
+  const totalFocusTime = totalAgg[0]?.totalTimeSpent || 0; // In seconds
+
+  // Daily completion rate: today's completed / today's total tasks
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+  const todayEnd = new Date();
+  todayEnd.setHours(23, 59, 59, 999);
+
+  const todayTotal = await Todo.countDocuments({
+    user: userId,
+    $or: [
+      { isRecurring: true },
+      { isRecurring: false, createdAt: { $gte: todayStart, $lte: todayEnd } },
+      { isRecurring: false, isCompleted: false },
+    ],
+  });
+
+  const todayCompleted = await Todo.countDocuments({
+    user: userId,
+    isCompleted: true,
+    $or: [
+      { isRecurring: true, completedAt: { $gte: todayStart } },
+      { isRecurring: false, completedAt: { $gte: todayStart } },
+    ],
+  });
+
+  const completionRate = todayTotal > 0 ? todayCompleted / todayTotal : 0;
 
   // 5. Format Data for Frontend
   let finalLabels = [];
@@ -352,11 +380,13 @@ export const getStats = asyncHandler(async (req, res) => {
 
   res.json({
     labels: finalLabels,
-    data: finalData, // For Yearly, this is [{date, count}]. For others, [1, 0, 5...]
-    completionRate:
-      totalTasksCreated > 0 ? totalCompleted / totalTasksCreated : 0,
+    data: finalData,
+    completionRate,
     totalCompleted,
+    totalFocusTime,
     streak,
+    todayCompleted,
+    todayTotal,
   });
 });
 

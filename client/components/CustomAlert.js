@@ -7,7 +7,6 @@ import {
   Platform,
   Animated,
 } from "react-native";
-import { useTheme } from "../context/ThemeContext";
 import { Ionicons } from "@expo/vector-icons";
 
 export default function CustomAlert({
@@ -22,7 +21,7 @@ export default function CustomAlert({
   icon = "alert-circle", // Default icon
   iconColor = "#ef4444", // Default icon color (red-500)
 }) {
-  const { isDark } = useTheme();
+  const isDark = true;
   const scaleValue = useRef(new Animated.Value(0)).current;
   const opacityValue = useRef(new Animated.Value(0)).current;
 

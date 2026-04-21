@@ -1,28 +1,25 @@
-import React, { useState, useCallback } from "react";
+import React from "react";
 import {
   View,
   Text,
-  FlatList,
+  ScrollView,
   TouchableOpacity,
   RefreshControl,
-  ScrollView,
+  LayoutAnimation,
   Platform,
   UIManager,
-  LayoutAnimation,
-  ActivityIndicator,
-  Image,
 } from "react-native";
-import { useFocusEffect } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
-import api from "../services/authService";
-import { useTheme } from "../context/ThemeContext";
-import haptics from "../services/hapticsService";
-import CustomAlert from "../components/CustomAlert";
-import { useCustomAlert } from "../hooks/useCustomAlert";
-import DailyTimeline from "../components/DailyTimeline";
+import Svg, { Circle } from "react-native-svg";
+import Animated, {
+  useSharedValue,
+  useAnimatedProps,
+  withSpring,
+} from "react-native-reanimated";
+import { useTodos, useToggleComplete } from "../hooks/useTodos";
+import { useAuthStore } from "../store/useAuthStore";
 
-// Enable LayoutAnimation
 if (
   Platform.OS === "android" &&
   UIManager.setLayoutAnimationEnabledExperimental
@@ -30,287 +27,318 @@ if (
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
+const AnimatedCircle = Animated.createAnimatedComponent(Circle);
+
+const calcStreak = (history = []) => {
+  if (!history || history.length === 0) return 0;
+  const uniqueDays = [
+    ...new Set(history.map((d) => new Date(d).toISOString().slice(0, 10))),
+  ]
+    .sort()
+    .reverse();
+  const now = new Date();
+  const todayStr = now.toISOString().slice(0, 10);
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+  const yesterdayStr = yesterday.toISOString().slice(0, 10);
+  if (uniqueDays[0] !== todayStr && uniqueDays[0] !== yesterdayStr) return 0;
+  let streak = 0;
+  let checkDate = new Date(uniqueDays[0]);
+  for (const dateStr of uniqueDays) {
+    if (dateStr === checkDate.toISOString().slice(0, 10)) {
+      streak++;
+      checkDate.setDate(checkDate.getDate() - 1);
+    } else {
+      break;
+    }
+  }
+  return streak;
+};
+
 export default function HomeScreen({ navigation }) {
-  const { isDark } = useTheme();
-  const [todos, setTodos] = useState([]);
-  const [refreshing, setRefreshing] = useState(false);
-  const [filterStatus, setFilterStatus] = useState("all");
+  const { user } = useAuthStore();
+  const userName = user?.name || "Shivam";
+  const { data: todos = [], isLoading, refetch, isRefetching } = useTodos();
+  const toggleCompleteMutation = useToggleComplete();
 
-  const { alertProps, showAlert } = useCustomAlert();
-  const [itemToDelete, setItemToDelete] = useState(null);
-  const [deletingId, setDeletingId] = useState(null);
-
-  // Separate Habits (Recurring) and One-off Tasks
-  const habits = todos.filter((t) => t.isRecurring);
-  const oneOffTasks = todos.filter((t) => !t.isRecurring);
-
-  const filteredTasks = oneOffTasks.filter((t) => {
-    if (filterStatus === "pending") return !t.isCompleted;
-    if (filterStatus === "completed") return t.isCompleted;
-    return true;
-  });
-
-  const fetchTodos = async () => {
-    try {
-      const response = await api.get("/todos");
-      // Ensure we always set an array
-      setTodos(Array.isArray(response.data) ? response.data : []);
-    } catch (error) {
-      console.error(error);
-      setTodos([]); // Reset to empty array on error
-    }
+  const toggleComplete = (item) => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    toggleCompleteMutation.mutate(item);
   };
 
-  const onRefresh = useCallback(() => {
-    setRefreshing(true);
-    fetchTodos().finally(() => setRefreshing(false));
-  }, []);
+  const routines = todos.filter((t) => t.isRecurring);
+  const tasks = todos.filter((t) => !t.isRecurring);
+  const activeTasks = tasks.filter((t) => !t.isCompleted);
+  const completedTasks = tasks.filter((t) => t.isCompleted);
 
-  useFocusEffect(
-    useCallback(() => {
-      fetchTodos();
-    }, []),
-  );
+  const routinesDone = routines.filter((t) => t.isCompleted).length;
+  const routinesTotal = routines.length;
+  const routinePercent =
+    routinesTotal === 0 ? 0 : Math.round((routinesDone / routinesTotal) * 100);
 
-  const deleteTodo = async (id) => {
-    try {
-      setDeletingId(id);
-      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-      await api.delete(`/todos/${id}`);
-      fetchTodos();
-    } catch (error) {
-      showAlert({ title: "Error", message: "Failed to delete item" });
-    } finally {
-      setDeletingId(null);
-      setItemToDelete(null);
-    }
-  };
-
-  const confirmDelete = (id) => {
-    setItemToDelete(id);
-    showAlert({
-      title: "Confirm Deletion",
-      message: "This action cannot be undone.",
-      confirmText: "Delete",
-      confirmColor: "bg-red-500",
-      onConfirm: () => deleteTodo(id),
+  const progress = useSharedValue(0);
+  React.useEffect(() => {
+    progress.value = withSpring(routinePercent / 100, {
+      damping: 15,
+      stiffness: 90,
     });
-  };
+  }, [routinePercent]);
 
-  const toggleComplete = async (item) => {
-    try {
-      // Animate list layout changes
-      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+  const animatedProps = useAnimatedProps(() => ({
+    strokeDashoffset: 2 * Math.PI * 50 * (1 - progress.value),
+  }));
 
-      // Optimistic
-      setTodos((prev) =>
-        prev.map((t) =>
-          t._id === item._id ? { ...t, isCompleted: !item.isCompleted } : t,
-        ),
-      );
+  const now = new Date();
+  const hour = now.getHours();
+  const greeting =
+    hour < 12 ? "Good Morning" : hour < 17 ? "Good Afternoon" : "Good Evening";
 
-      // Trigger Haptic
-      if (!item.isCompleted) {
-        haptics.success(); // Task is being marked as completed
-      } else {
-        haptics.light(); // Task is being marked as incomplete
-      }
-
-      console.log(
-        "Updating todo:",
-        item._id,
-        "isCompleted:",
-        !item.isCompleted,
-      );
-      const response = await api.put(`/todos/${item._id}`, {
-        isCompleted: !item.isCompleted,
-      });
-      console.log("Update response:", response.data);
-      // Background sync
-      fetchTodos();
-    } catch (e) {
-      console.error("Toggle error:", e.response?.data || e.message);
-      fetchTodos(); // Revert on fail
-    }
-  };
-
-  // --- Render Components ---
-
-  const renderTaskItem = ({ item }) => {
-    const isDeleting = deletingId === item._id;
-
-    // Priority Dot Color
-    const priorityColor =
-      item.priority === "HIGH"
-        ? "bg-red-500"
-        : item.priority === "MEDIUM"
-          ? "bg-orange-400"
-          : "bg-blue-400";
-
-    return (
+  const renderTask = (item) => (
+    <TouchableOpacity
+      key={item._id}
+      activeOpacity={0.7}
+      onPress={() => navigation.navigate("TodoDetail", { todo: item })}
+      className={`flex-row items-center py-4 px-1 ${item.isCompleted ? "opacity-40" : "opacity-100"}`}
+    >
       <TouchableOpacity
-        activeOpacity={0.7}
-        onPress={() => navigation.navigate("TodoDetail", { todo: item })}
-        onLongPress={() => confirmDelete(item._id)}
-        className={`mb-3 mx-4 p-4 rounded-2xl flex-row items-center border ${
-          isDark
-            ? "bg-card-dark border-card-highlight-dark"
-            : "bg-white border-border-light"
+        onPress={() => toggleComplete(item)}
+        className={`w-6 h-6 rounded-lg border-2 items-center justify-center mr-3 ${
+          item.isCompleted ? "bg-secondary border-secondary" : "border-white/20"
         }`}
-        style={{
-          // Subtle shadow for depth
-          shadowColor: "#000",
-          shadowOffset: { width: 0, height: 2 },
-          shadowOpacity: isDark ? 0 : 0.05,
-          shadowRadius: 4,
-          elevation: isDark ? 0 : 2,
-        }}
+        style={
+          item.isCompleted
+            ? {
+                shadowColor: "#00e3fd",
+                shadowOffset: { width: 0, height: 0 },
+                shadowOpacity: 0.6,
+                shadowRadius: 6,
+                elevation: 4,
+              }
+            : {}
+        }
       >
-        {/* Check Circle */}
-        <TouchableOpacity
-          hitSlop={10}
-          onPress={() => toggleComplete(item)}
-          className={`w-6 h-6 rounded-full border-2 items-center justify-center mr-3 ${
-            item.isCompleted
-              ? "bg-primary border-primary"
-              : isDark
-                ? "border-zinc-600"
-                : "border-zinc-300"
-          }`}
-        >
-          {item.isCompleted && (
-            <Ionicons name="checkmark" size={14} color="white" />
-          )}
-        </TouchableOpacity>
-
-        {/* Content */}
-        <View className="flex-1">
-          <Text
-            numberOfLines={1}
-            className={`text-base font-semibold ${
-              item.isCompleted
-                ? "line-through text-text-muted dark:text-text-muted-dark"
-                : isDark
-                  ? "text-text-dark"
-                  : "text-text-light"
-            }`}
-          >
-            {item.title}
-          </Text>
-          {item.description ? (
-            <Text
-              numberOfLines={1}
-              className="text-xs text-text-muted dark:text-text-muted-dark mt-0.5"
-            >
-              {item.description}
-            </Text>
-          ) : null}
-        </View>
-
-        {/* Priority Dot */}
-        <View className={`w-2 h-2 rounded-full ${priorityColor} ml-2`} />
-
-        {isDeleting && (
-          <View className="absolute inset-0 bg-black/10 dark:bg-black/50 rounded-2xl justify-center items-center">
-            <ActivityIndicator size="small" />
-          </View>
+        {item.isCompleted && (
+          <Ionicons name="checkmark" size={14} color="#0b0e14" />
         )}
       </TouchableOpacity>
-    );
-  };
-
-  return (
-    <SafeAreaView
-      className={`flex-1 ${isDark ? "bg-background-dark" : "bg-background-light"}`}
-      edges={["top", "left", "right"]}
-    >
-      {/* Header */}
-      <View className="px-4 py-4 flex-row justify-between items-center">
-        <View>
-          <Text
-            className={`text-3xl font-bold ${isDark ? "text-white" : "text-black"}`}
-          >
-            Good Day
-          </Text>
-          <Text
-            className={`text-sm font-medium ${isDark ? "text-zinc-400" : "text-zinc-500"}`}
-          >
-            {new Date().toLocaleDateString("en-US", {
-              weekday: "long",
-              month: "long",
-              day: "numeric",
-            })}
+      <View className="flex-1">
+        <Text
+          className={`text-sm font-body ${item.isCompleted ? "text-text-muted-dark line-through" : "text-white"}`}
+        >
+          {item.title}
+        </Text>
+      </View>
+      {item.priority === "HIGH" && (
+        <View className="bg-red-500/15 px-2 py-0.5 rounded-md ml-2">
+          <Text className="text-[10px] font-label uppercase text-red-400 tracking-wider">
+            High
           </Text>
         </View>
-        <TouchableOpacity
-          onPress={() => navigation.navigate("AddTodo", { type: "task" })}
-          className="w-10 h-10 bg-primary rounded-full items-center justify-center"
-        >
-          <Ionicons name="add" size={24} color="white" />
-        </TouchableOpacity>
-      </View>
+      )}
+      <Ionicons name="chevron-forward" size={14} color="#3a3d44" />
+    </TouchableOpacity>
+  );
 
+  return (
+    <SafeAreaView className="flex-1 bg-background-dark" edges={["top"]}>
       <ScrollView
-        contentContainerStyle={{ paddingBottom: 100 }}
+        contentContainerStyle={{ paddingBottom: 120 }}
+        showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            tintColor={isDark ? "#fff" : "#000"}
+            refreshing={isRefetching}
+            onRefresh={refetch}
+            tintColor="#c799ff"
           />
         }
       >
-        {/* Stories / Habits Section Removed - Moved to Routines Tab */}
-        {/* Daily Timeline */}
-        <DailyTimeline
-          tasks={todos}
-          onTaskPress={(task) =>
-            navigation.navigate("TodoDetail", { todo: task })
-          }
-        />
-        {/* Tasks Section Header */}
-        <View className="flex-row items-center justify-between px-6 mb-2">
-          <Text
-            className={`text-lg font-bold ${isDark ? "text-white" : "text-black"}`}
-          >
-            Tasks
+        {/* ── Header ─────────────────────────────────────── */}
+        <View className="px-4 pt-6 pb-8">
+          <Text className="text-sm font-body text-text-muted-dark mb-1">
+            {greeting}
           </Text>
-          {/* Minimal Filter */}
-          <TouchableOpacity
-            onPress={() =>
-              setFilterStatus((prev) => (prev === "all" ? "pending" : "all"))
-            }
-          >
-            <Text className="text-primary font-medium text-sm">
-              {filterStatus === "all" ? "Show All" : "Pending Only"}
-            </Text>
-          </TouchableOpacity>
+          <Text className="text-3xl font-display text-white tracking-tight">
+            Hello, {userName} 👋
+          </Text>
         </View>
-        {/* Tasks List */}
-        {filteredTasks.length === 0 ? (
-          <View className="items-center justify-center py-10 opacity-50">
-            <Ionicons
-              name="leaf-outline"
-              size={48}
-              color={isDark ? "#555" : "#ccc"}
-            />
-            <Text
-              className={`mt-2 ${isDark ? "text-zinc-500" : "text-zinc-400"}`}
-            >
-              No tasks found. Enjoy your day!
+
+        {/* ── Daily Routine Progress ─────────────────────── */}
+        {routinesTotal > 0 && (
+          <View className="mx-4 mt-2 mb-10 p-5 rounded-[24px] bg-white/[0.03] border border-white/[0.06]">
+            <View className="flex-row items-center">
+              <View className="relative items-center justify-center mr-6">
+                <Svg width="84" height="84" viewBox="0 0 120 120">
+                  <Circle
+                    cx="60"
+                    cy="60"
+                    r="50"
+                    stroke="#1c2028"
+                    strokeWidth="10"
+                    fill="none"
+                  />
+                  <AnimatedCircle
+                    cx="60"
+                    cy="60"
+                    r="50"
+                    stroke="#00e3fd"
+                    strokeWidth="10"
+                    fill="none"
+                    strokeDasharray={2 * Math.PI * 50}
+                    animatedProps={animatedProps}
+                    strokeLinecap="round"
+                    transform="rotate(-90 60 60)"
+                  />
+                </Svg>
+                <View className="absolute items-center justify-center">
+                  <Text className="text-xl font-display text-white">
+                    {routinePercent}%
+                  </Text>
+                </View>
+              </View>
+              <View className="flex-1">
+                <Text className="text-xs font-label text-text-muted-dark uppercase tracking-widest mb-2">
+                  Daily Routines
+                </Text>
+                <View className="flex-row items-baseline mb-0.5">
+                  <Text className="text-2xl font-display text-white">
+                    {routinesDone}
+                  </Text>
+                  <Text className="text-sm font-body text-text-muted-dark ml-1">
+                    / {routinesTotal}
+                  </Text>
+                </View>
+                <Text className="text-xs font-body text-text-muted-dark">
+                  completed today
+                </Text>
+              </View>
+            </View>
+          </View>
+        )}
+
+        {/* ── Routines Checklist ──────────────────────────── */}
+        {routines.length > 0 && (
+          <View className="mx-4 mb-10">
+            <View className="flex-row items-center gap-2 mb-4 px-1">
+              <View className="w-1.5 h-1.5 rounded-full bg-secondary" />
+              <Text className="text-xs font-label text-text-muted-dark uppercase tracking-widest">
+                Routines — {routinesDone}/{routinesTotal}
+              </Text>
+            </View>
+            <View className="bg-white/[0.03] border border-white/[0.06] rounded-[20px] px-4 py-1">
+              {routines.map((item, i) => (
+                <View key={item._id}>
+                  <TouchableOpacity
+                    activeOpacity={0.7}
+                    onPress={() =>
+                      navigation.navigate("TodoDetail", { todo: item })
+                    }
+                    className={`flex-row items-center py-4 ${item.isCompleted ? "opacity-40" : "opacity-100"}`}
+                  >
+                    <TouchableOpacity
+                      onPress={() => toggleComplete(item)}
+                      className={`w-6 h-6 rounded-lg border-2 items-center justify-center mr-3 ${
+                        item.isCompleted
+                          ? "bg-secondary border-secondary"
+                          : "border-white/20"
+                      }`}
+                    >
+                      {item.isCompleted && (
+                        <Ionicons name="checkmark" size={14} color="#0b0e14" />
+                      )}
+                    </TouchableOpacity>
+                    <View className="flex-1">
+                      <Text
+                        className={`text-sm font-body ${item.isCompleted ? "text-text-muted-dark line-through" : "text-white"}`}
+                      >
+                        {item.title}
+                      </Text>
+                    </View>
+                    {calcStreak(item.completionHistory) > 0 && (
+                      <View className="flex-row items-center bg-orange-500/10 px-2 py-0.5 rounded-md mr-1">
+                        <Ionicons name="flame" size={12} color="#f97316" />
+                        <Text className="text-[10px] font-label text-orange-400 ml-0.5">
+                          {calcStreak(item.completionHistory)}d
+                        </Text>
+                      </View>
+                    )}
+                    <Ionicons name="repeat" size={14} color="#52555c" />
+                  </TouchableOpacity>
+                  {i < routines.length - 1 && (
+                    <View className="h-px bg-white/[0.05]" />
+                  )}
+                </View>
+              ))}
+            </View>
+          </View>
+        )}
+
+        {/* ── Active Tasks ───────────────────────────────── */}
+        {activeTasks.length > 0 && (
+          <View className="mx-4 mb-10">
+            <View className="flex-row items-center gap-2 mb-4 px-1">
+              <View className="w-1.5 h-1.5 rounded-full bg-primary" />
+              <Text className="text-xs font-label text-text-muted-dark uppercase tracking-widest">
+                Active Tasks — {activeTasks.length}
+              </Text>
+            </View>
+            <View className="bg-white/[0.03] border border-white/[0.06] rounded-[20px] px-4 py-1">
+              {activeTasks.map((item, i) => (
+                <View key={item._id}>
+                  {renderTask(item)}
+                  {i < activeTasks.length - 1 && (
+                    <View className="h-px bg-white/[0.05]" />
+                  )}
+                </View>
+              ))}
+            </View>
+          </View>
+        )}
+
+        {/* ── Completed Tasks ────────────────────────────── */}
+        {completedTasks.length > 0 && (
+          <View className="mx-4 mb-10">
+            <View className="flex-row items-center gap-2 mb-4 px-1">
+              <View className="w-1.5 h-1.5 rounded-full bg-green-500" />
+              <Text className="text-xs font-label text-text-muted-dark uppercase tracking-widest">
+                Done — {completedTasks.length}
+              </Text>
+            </View>
+            <View className="bg-white/[0.03] border border-white/[0.06] rounded-[20px] px-4 py-1">
+              {completedTasks.map((item, i) => (
+                <View key={item._id}>
+                  {renderTask(item)}
+                  {i < completedTasks.length - 1 && (
+                    <View className="h-px bg-white/[0.05]" />
+                  )}
+                </View>
+              ))}
+            </View>
+          </View>
+        )}
+
+        {todos.length === 0 && !isLoading && (
+          <View className="items-center py-20 opacity-40 mx-4">
+            <Ionicons name="leaf-outline" size={48} color="#45484f" />
+            <Text className="mt-4 text-text-muted-dark font-body text-sm text-center leading-6">
+              Your day is clear.{"\n"}Tap + to add your first task.
             </Text>
           </View>
-        ) : (
-          <FlatList
-            data={filteredTasks}
-            keyExtractor={(item) => item._id}
-            renderItem={renderTaskItem}
-            scrollEnabled={false} // Let parent ScrollView handle it
-          />
         )}
       </ScrollView>
-
-      <CustomAlert {...alertProps} />
+      <TouchableOpacity
+        activeOpacity={0.8}
+        onPress={() => navigation.navigate("AddTodo", { type: "task" })}
+        className="absolute bottom-8 right-6 w-16 h-16 rounded-full bg-primary items-center justify-center"
+        style={{
+          shadowColor: "#c799ff",
+          shadowOffset: { width: 0, height: 6 },
+          shadowOpacity: 0.6,
+          shadowRadius: 16,
+          elevation: 10,
+        }}
+      >
+        <Ionicons name="add" size={32} color="#0b0e14" />
+      </TouchableOpacity>
     </SafeAreaView>
   );
 }

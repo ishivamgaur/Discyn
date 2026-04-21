@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from "react";
+import React, { useState } from "react";
 import {
   View,
   Text,
@@ -9,162 +9,93 @@ import {
   ActivityIndicator,
 } from "react-native";
 import {
-  LineChart,
   BarChart,
   ContributionGraph,
   ProgressChart,
 } from "react-native-chart-kit";
-
-// ... imports
-
-// ... inside component
-
-import { useFocusEffect } from "@react-navigation/native";
-import api from "../services/authService";
-import { useTheme } from "../context/ThemeContext";
 import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useStats } from "../hooks/useTodos";
 
 const screenWidth = Dimensions.get("window").width;
 
 export default function StatsScreen() {
-  const { isDark } = useTheme();
-  const [refreshing, setRefreshing] = useState(false);
   const [range, setRange] = useState("weekly"); // weekly | monthly | yearly
-  const [stats, setStats] = useState({
+
+  const { data, isLoading, refetch, isRefetching } = useStats(range);
+
+  const stats = data || {
     labels: ["M", "T", "W", "T", "F", "S", "S"],
     data: [0, 0, 0, 0, 0, 0, 0],
     todayCount: 0,
     streak: 0,
     completionRate: 0,
     totalCompleted: 0,
-  });
-  const [loading, setLoading] = useState(true);
-
-  const fetchStats = async () => {
-    try {
-      const { data } = await api.get(`/todos/stats?range=${range}`);
-
-      setStats((prev) => ({
-        ...prev,
-        labels: data.labels,
-        data: data.data,
-        completionRate: data.completionRate,
-        todayCount: data.data[data.data.length - 1] || 0,
-        totalCompleted: data.totalCompleted,
-      }));
-    } catch (e) {
-      console.error("Failed to fetch stats:", e);
-    } finally {
-      setLoading(false);
-    }
+    totalFocusTime: 0,
   };
 
-  useFocusEffect(
-    useCallback(() => {
-      fetchStats();
-    }, [range]),
-  );
-
-  const onRefresh = useCallback(() => {
-    setRefreshing(true);
-    fetchStats().finally(() => setRefreshing(false));
-  }, [range]);
-
   const chartConfig = {
-    backgroundGradientFrom: isDark ? "#18181b" : "#ffffff", // Zinc 900 / White
-    backgroundGradientTo: isDark ? "#18181b" : "#ffffff",
-    fillShadowGradientFrom: "#3b82f6", // Blue 500
-    fillShadowGradientTo: "#3b82f6",
-    fillShadowGradientFromOpacity: 0.2,
-    fillShadowGradientToOpacity: 0,
-    color: (opacity = 1) => `rgba(59, 130, 246, ${opacity})`, // Blue 500
+    backgroundGradientFrom: "#1c2028", // surface-container-high
+    backgroundGradientTo: "#1c2028",
+    fillShadowGradientFrom: "#00e3fd", // neon blue
+    fillShadowGradientTo: "#00e3fd",
+    fillShadowGradientFromOpacity: 0.4,
+    fillShadowGradientToOpacity: 0.1,
+    color: (opacity = 1) => `rgba(0, 227, 253, ${opacity})`,
     strokeWidth: 2,
     barPercentage: 0.5,
     useShadowColorFromDataset: false,
-    labelColor: (opacity = 1) =>
-      isDark
-        ? `rgba(161, 161, 170, ${opacity})`
-        : `rgba(113, 113, 122, ${opacity})`, // Zinc 400 / 500
-    propsForDots: {
-      r: "4",
-      strokeWidth: "2",
-      stroke: "#2563eb", // Blue 600
-    },
+    labelColor: (opacity = 1) => `rgba(169, 171, 179, ${opacity})`, // on_surface_variant
     decimalPlaces: 0,
   };
 
-  if (loading && !refreshing) {
+  if (isLoading && !isRefetching) {
     return (
-      <View
-        className={`flex-1 justify-center items-center ${isDark ? "bg-background-dark" : "bg-background-light"}`}
-      >
-        <ActivityIndicator color="#2563eb" />
+      <View className="flex-1 justify-center items-center bg-background-dark">
+        <ActivityIndicator color="#c799ff" size="large" />
       </View>
     );
   }
 
   return (
-    <SafeAreaView
-      edges={["top"]}
-      className={`flex-1 ${isDark ? "bg-background-dark" : "bg-background-light"}`}
-    >
+    <SafeAreaView edges={["top"]} className="flex-1 bg-background-dark">
       <ScrollView
         className="flex-1"
+        contentContainerStyle={{ paddingBottom: 100 }}
         refreshControl={
           <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            tintColor={isDark ? "#fff" : "#000"}
+            refreshing={isRefetching}
+            onRefresh={refetch}
+            tintColor="#c799ff"
           />
         }
       >
-        <View className="px-6 py-6">
+        <View className="px-4 py-4">
           <View className="flex-row items-center gap-2 mb-2">
-            <View className="bg-primary/10 p-2 rounded-lg">
-              <Ionicons name="stats-chart" size={24} color="#3b82f6" />
+            <View className="bg-primary/20 p-2 rounded-xl">
+              <Ionicons name="stats-chart" size={24} color="#c799ff" />
             </View>
-            <Text
-              className={`text-2xl font-bold ${
-                isDark ? "text-white" : "text-gray-900"
-              }`}
-            >
-              Performance
+            <Text className="text-3xl font-display text-white tracking-tight">
+              Analytics
             </Text>
           </View>
-          <Text
-            className={`text-sm mb-6 ${isDark ? "text-zinc-500" : "text-zinc-500"}`}
-          >
-            Track your consistency and focus over time.
+          <Text className="text-sm font-body text-text-muted-dark mb-10">
+            Deep dive into your operational efficiency and historical data.
           </Text>
 
           {/* Range Selector */}
-          <View
-            className={`flex-row mb-6 p-1 rounded-xl ${
-              isDark ? "bg-card-highlight-dark" : "bg-zinc-100"
-            }`}
-          >
+          <View className="flex-row mb-6 p-1 rounded-2xl bg-white/5 border border-white/10">
             {["weekly", "monthly", "yearly"].map((r) => (
               <TouchableOpacity
                 key={r}
                 onPress={() => setRange(r)}
-                className={`flex-1 py-2 rounded-lg items-center ${
-                  range === r
-                    ? isDark
-                      ? "bg-zinc-700"
-                      : "bg-white shadow-sm"
-                    : ""
+                className={`flex-1 py-3 rounded-xl items-center transition-all ${
+                  range === r ? "bg-white/10" : "bg-transparent"
                 }`}
               >
                 <Text
-                  className={`text-xs font-bold capitalize ${
-                    range === r
-                      ? isDark
-                        ? "text-white"
-                        : "text-gray-900"
-                      : isDark
-                        ? "text-zinc-500"
-                        : "text-zinc-500"
+                  className={`text-xs font-label uppercase tracking-widest ${
+                    range === r ? "text-white" : "text-text-muted-dark"
                   }`}
                 >
                   {r}
@@ -176,77 +107,68 @@ export default function StatsScreen() {
           {/* Cards Row */}
           <View className="flex-row gap-4 mb-6">
             {/* Streak Card */}
-            <View
-              className={`flex-1 p-5 rounded-3xl border ${
-                isDark
-                  ? "bg-card-dark border-zinc-800"
-                  : "bg-white border-zinc-100"
-              }`}
-            >
+            <View className="flex-1 p-5 rounded-3xl bg-white/5 border border-white/10 relative overflow-hidden">
+              <View className="absolute -right-4 -top-4 opacity-10">
+                <Ionicons name="flame" size={80} color="#c799ff" />
+              </View>
               <View className="flex-row items-center gap-2 mb-2">
-                <Ionicons name="flame" size={20} color="#ef4444" />
-                <Text
-                  className={`text-xs font-medium uppercase tracking-wider ${
-                    isDark ? "text-zinc-500" : "text-zinc-400"
-                  }`}
-                >
-                  Streak
+                <Ionicons name="flame" size={20} color="#c799ff" />
+                <Text className="text-xs font-label uppercase tracking-wider text-text-muted-dark">
+                  Active Streak
                 </Text>
               </View>
-              <Text
-                className={`text-3xl font-bold ${isDark ? "text-white" : "text-gray-900"}`}
-              >
+              <Text className="text-4xl font-display text-white">
                 {stats.streak}{" "}
-                <Text className="text-sm font-normal text-zinc-500">days</Text>
+                <Text className="text-base font-body text-text-muted-dark">
+                  days
+                </Text>
               </Text>
             </View>
 
             {/* Total Wins Card */}
-            <View
-              className={`flex-1 p-5 rounded-3xl border ${
-                isDark
-                  ? "bg-card-dark border-zinc-800"
-                  : "bg-white border-zinc-100"
-              }`}
-            >
+            <View className="flex-1 p-5 rounded-3xl bg-white/5 border border-white/10 relative overflow-hidden">
+              <View className="absolute -right-4 -top-4 opacity-10">
+                <Ionicons name="checkmark-done" size={80} color="#00e3fd" />
+              </View>
               <View className="flex-row items-center gap-2 mb-2">
-                <Ionicons name="checkmark-circle" size={20} color="#22c55e" />
-                <Text
-                  className={`text-xs font-medium uppercase tracking-wider ${
-                    isDark ? "text-zinc-500" : "text-zinc-400"
-                  }`}
-                >
-                  Total
+                <Ionicons name="checkmark-circle" size={20} color="#00e3fd" />
+                <Text className="text-xs font-label uppercase tracking-wider text-text-muted-dark">
+                  Total Done
                 </Text>
               </View>
-              <Text
-                className={`text-3xl font-bold ${isDark ? "text-white" : "text-gray-900"}`}
-              >
+              <Text className="text-4xl font-display text-white">
                 {stats.totalCompleted}{" "}
-                <Text className="text-sm font-normal text-zinc-500">done</Text>
+                <Text className="text-base font-body text-text-muted-dark">
+                  tasks
+                </Text>
               </Text>
             </View>
           </View>
 
+          {/* Deep Focus Time Card */}
+          <View className="w-full p-5 mb-6 rounded-3xl bg-primary/10 border border-primary/20 relative overflow-hidden">
+            <View className="absolute -right-6 -top-6 opacity-10">
+              <Ionicons name="time" size={100} color="#c799ff" />
+            </View>
+            <View className="flex-row items-center gap-2 mb-2">
+              <Ionicons name="time-outline" size={20} color="#c799ff" />
+              <Text className="text-xs font-label uppercase tracking-wider text-primary">
+                Total Deep Focus
+              </Text>
+            </View>
+            <Text className="text-4xl font-display text-white">
+              {stats.totalFocusTime ? Math.floor(stats.totalFocusTime / 60) : 0}{" "}
+              <Text className="text-base font-body text-primary">min</Text>
+            </Text>
+          </View>
+
           {/* Visualization Area */}
-          <View
-            className={`p-4 rounded-3xl border mb-6 ${
-              isDark
-                ? "bg-card-dark border-zinc-800"
-                : "bg-white border-zinc-100"
-            }`}
-          >
+          <View className="p-5 rounded-3xl bg-card-dark border border-white/10 mb-6">
             <View className="flex-row justify-between items-center mb-6">
-              <Text
-                className={`text-base font-bold capitalize px-2 ${
-                  isDark ? "text-white" : "text-gray-800"
-                }`}
-              >
+              <Text className="text-xl font-display text-white tracking-wide">
                 Activity Trend
               </Text>
-              <Text
-                className={`text-xs font-medium px-2 ${isDark ? "text-zinc-500" : "text-zinc-400"}`}
-              >
+              <Text className="text-xs font-label text-secondary uppercase tracking-widest">
                 {range === "weekly"
                   ? "Last 7 Days"
                   : range === "monthly"
@@ -255,48 +177,40 @@ export default function StatsScreen() {
               </Text>
             </View>
 
-            {/* Chart Switching Logic */}
+            {/* Chart */}
             {range === "yearly" ? (
               // HEATMAP
-              stats.data.length > 0 ? (
+              stats.data?.length > 0 ? (
                 <ContributionGraph
-                  values={stats.data} // [{date: "YYYY-MM-DD", count: 1}]
+                  values={stats.data}
                   endDate={new Date()}
                   numDays={105}
-                  width={screenWidth - 70}
+                  width={screenWidth - 80}
                   height={220}
                   chartConfig={{
                     ...chartConfig,
-                    backgroundGradientFrom: isDark ? "#18181b" : "#ffffff",
-                    backgroundGradientTo: isDark ? "#18181b" : "#ffffff",
-                    color: (opacity = 1) => `rgba(59, 130, 246, ${opacity})`,
-                    labelColor: (opacity = 1) =>
-                      isDark
-                        ? `rgba(255, 255, 255, ${opacity})`
-                        : `rgba(0, 0, 0, ${opacity})`,
+                    color: (opacity = 1) => `rgba(199, 153, 255, ${opacity})`, // primary neon purple
                   }}
-                  tooltipDataAttrs={(value) => ({
-                    rx: "2",
-                    ry: "2",
-                  })}
+                  tooltipDataAttrs={() => ({ rx: "4", ry: "4" })}
                 />
               ) : (
-                <Text className="text-zinc-500 text-center py-10">
-                  No yearly data yet
+                <Text className="text-text-muted-dark font-body text-center py-10">
+                  No yearly data available.
                 </Text>
               )
-            ) : // BAR CHART for Weekly/Monthly
-            stats.data.length > 0 &&
+            ) : // BAR CHART
+            stats.data?.length > 0 &&
               (range === "weekly" ? stats.data.some((x) => x > 0) : true) ? (
               <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                 <BarChart
                   data={{
-                    labels: stats.labels,
-                    datasets: [{ data: stats.data }],
+                    labels: stats.labels || [],
+                    datasets: [{ data: stats.data || [] }],
                   }}
                   width={Math.max(
                     screenWidth - 80,
-                    stats.labels.length * (range === "monthly" ? 30 : 50),
+                    (stats.labels?.length || 0) *
+                      (range === "monthly" ? 30 : 50),
                   )}
                   height={220}
                   yAxisLabel=""
@@ -304,66 +218,46 @@ export default function StatsScreen() {
                   chartConfig={{
                     ...chartConfig,
                     barPercentage: range === "monthly" ? 0.3 : 0.6,
-                    decimalPlaces: 0,
                   }}
-                  style={{
-                    borderRadius: 16,
-                    paddingRight: 20,
-                  }}
+                  style={{ borderRadius: 16, paddingRight: 20 }}
                   showValuesOnTopOfBars={range === "weekly"}
                 />
               </ScrollView>
             ) : (
               <View className="h-40 items-center justify-center">
-                <Ionicons
-                  name="bar-chart-outline"
-                  size={48}
-                  color={isDark ? "#333" : "#eee"}
-                />
-                <Text className="text-zinc-400 mt-2">
-                  No activity recorded yet
+                <Ionicons name="bar-chart-outline" size={48} color="#45484f" />
+                <Text className="text-text-muted-dark font-body mt-4">
+                  No activity recorded yet.
                 </Text>
               </View>
             )}
           </View>
 
           {/* Completion Rate */}
-          <View
-            className={`p-5 rounded-3xl border mb-6 flex-row items-center justify-between ${
-              isDark
-                ? "bg-card-dark border-zinc-800"
-                : "bg-white border-zinc-100"
-            }`}
-          >
+          <View className="p-5 rounded-3xl bg-white/5 border border-white/10 flex-row items-center justify-between">
             <View className="flex-1 pr-4">
-              <Text
-                className={`text-lg font-bold mb-1 ${
-                  isDark ? "text-white" : "text-gray-800"
-                }`}
-              >
-                Completion Rate
+              <Text className="text-xl font-display text-white tracking-wide mb-1">
+                Today's Rate
               </Text>
-              <Text className="text-zinc-500 text-xs leading-5">
-                Your efficiency in completing tasks vs creating them.
+              <Text className="text-text-muted-dark font-body text-sm leading-5">
+                Tasks completed today out of all active tasks.
               </Text>
             </View>
             <View className="items-center justify-center">
               <ProgressChart
                 data={{ labels: ["Done"], data: [stats.completionRate || 0] }}
-                width={80}
-                height={80}
-                strokeWidth={8}
-                radius={28}
+                width={90}
+                height={90}
+                strokeWidth={10}
+                radius={32}
                 chartConfig={{
                   ...chartConfig,
-                  color: (opacity = 1) => `rgba(37, 99, 235, ${opacity})`, // Blue
+                  color: (opacity = 1) => `rgba(199, 153, 255, ${opacity})`,
                 }}
                 hideLegend={true}
               />
               <View className="absolute inset-0 items-center justify-center">
-                <Text
-                  className={`text-xs font-bold ${isDark ? "text-white" : "text-gray-900"}`}
-                >
+                <Text className="text-sm font-display text-white mt-1">
                   {Math.round((stats.completionRate || 0) * 100)}%
                 </Text>
               </View>

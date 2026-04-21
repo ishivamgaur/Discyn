@@ -1,0 +1,1 @@
+fetch('http://localhost:8081/index.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable').then(res => res.text()).then(text => console.log(text)).catch(err => console.error(err));

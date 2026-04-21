@@ -1,278 +1,111 @@
-import React, { useState } from "react";
-import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  ScrollView,
-  KeyboardAvoidingView,
-  Platform,
-} from "react-native";
-import { useTheme } from "../context/ThemeContext";
-import api from "../services/authService";
+import React, { useState, useEffect } from "react";
+import { View, Text, TextInput, TouchableOpacity, ScrollView, KeyboardAvoidingView, Platform } from "react-native";
 import haptics from "../services/hapticsService";
 import { Ionicons } from "@expo/vector-icons";
-import { useCustomAlert } from "../hooks/useCustomAlert";
-import CustomAlert from "../components/CustomAlert";
-import {
-  cancelReminders,
-  handleTaskScheduling,
-} from "../services/notificationService";
+import Toast from "react-native-toast-message";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useUpdateTodo, useDeleteTodo } from "../hooks/useTodos";
 
 export default function TodoDetailScreen({ route, navigation }) {
   const { todo } = route.params;
-  const { isDark } = useTheme();
-  const { alertProps, showAlert } = useCustomAlert();
+  const updateMutation = useUpdateTodo();
+  const deleteMutation = useDeleteTodo();
 
   const [title, setTitle] = useState(todo.title);
   const [description, setDescription] = useState(todo.description);
-  const [isSaving, setIsSaving] = useState(false);
   const [isCompleted, setIsCompleted] = useState(todo.isCompleted);
+  const [isTimerRunning, setIsTimerRunning] = useState(false);
+  const [timeSpent, setTimeSpent] = useState(todo.timeSpent || 0);
+
+  useEffect(() => {
+    let interval;
+    if (isTimerRunning) {
+      interval = setInterval(() => setTimeSpent((p) => p + 1), 1000);
+    }
+    return () => clearInterval(interval);
+  }, [isTimerRunning]);
+
+  const formatTime = (s) => `${Math.floor(s / 60).toString().padStart(2, "0")}:${(s % 60).toString().padStart(2, "0")}`;
 
   const handleSave = async () => {
     if (!title.trim()) {
       haptics.error();
-      showAlert({ title: "Validation", message: "Title cannot be empty" });
+      Toast.show({ type: "error", text1: "Validation", text2: "Title cannot be empty" });
       return;
     }
-
-    setIsSaving(true);
     try {
-      await api.put(`/todos/${todo._id}`, { title, description, isCompleted });
+      await updateMutation.mutateAsync({ id: todo._id, payload: { title, description, isCompleted, timeSpent } });
       haptics.success();
       navigation.goBack();
-    } catch (error) {
-      console.error(error);
+    } catch (e) {
       haptics.error();
-      showAlert({
-        title: "Error",
-        message: "Failed to update task",
-        confirmColor: "bg-red-500",
-      });
-    } finally {
-      setIsSaving(false);
+      Toast.show({ type: "error", text1: "Error", text2: "Failed to update task" });
     }
   };
 
-  const handleDelete = () => {
-    haptics.medium(); // Warning impact
-    showAlert({
-      title: "Delete Task",
-      message:
-        "Are you sure you want to remove this task? This cannot be undone.",
-      confirmText: "Delete",
-      confirmColor: "bg-red-500",
-      icon: "trash-outline",
-      iconColor: "#ef4444",
-      onCancel: () => {}, // Show cancel button
-      onConfirm: async () => {
-        try {
-          await cancelReminders(todo._id); // Cleanup reminders
-          await api.delete(`/todos/${todo._id}`);
-          haptics.success();
-          navigation.goBack();
-        } catch (error) {
-          haptics.error();
-          showAlert({ title: "Error", message: "Failed to delete task" });
-        }
-      },
-    });
-  };
-
-  const toggleComplete = async () => {
+  const handleDelete = async () => {
+    haptics.medium();
     try {
-      const newStatus = !isCompleted;
-      setIsCompleted(newStatus); // Optimistic UI
-
-      if (newStatus) {
-        haptics.success();
-        await cancelReminders(todo._id);
-      } else {
-        haptics.light();
-        if (todo.scheduledTime && new Date(todo.scheduledTime) > new Date()) {
-          await handleTaskScheduling(todo);
-        }
-      }
-
-      await api.put(`/todos/${todo._id}`, { isCompleted: newStatus });
-    } catch (error) {
-      setIsCompleted(!isCompleted); // Revert
+      await deleteMutation.mutateAsync(todo._id);
+      haptics.success();
+      Toast.show({ type: "success", text1: "Deleted", text2: "Task removed" });
+      navigation.goBack();
+    } catch (e) {
       haptics.error();
+      Toast.show({ type: "error", text1: "Error", text2: "Failed to delete task" });
     }
   };
 
   return (
-    <SafeAreaView
-      edges={["top"]}
-      className={`flex-1 ${isDark ? "bg-background-dark" : "bg-background-light"}`}
-    >
-      {/* Header */}
-      <View className="px-6 py-4 flex-row items-center justify-between border-b border-zinc-100 dark:border-zinc-800">
+    <SafeAreaView edges={["top"]} className="flex-1 bg-background-dark">
+      <View className="px-4 py-3 flex-row items-center justify-between border-b border-white/10">
         <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Text className="text-primary text-base font-medium">Cancel</Text>
+          <Text className="text-secondary font-label tracking-wider uppercase text-xs">Cancel</Text>
         </TouchableOpacity>
-        <Text
-          className={`text-base font-bold ${isDark ? "text-white" : "text-gray-900"}`}
-        >
-          Details
-        </Text>
-        <TouchableOpacity onPress={handleSave} disabled={isSaving}>
-          <Text
-            className={`text-base font-bold ${isSaving ? "text-zinc-400" : "text-primary"}`}
-          >
-            Save
-          </Text>
+        <Text className="text-lg font-display text-white tracking-wide">Details</Text>
+        <TouchableOpacity onPress={handleSave} disabled={updateMutation.isPending}>
+          <Text className={`text-xs font-label uppercase tracking-wider ${updateMutation.isPending ? "text-text-muted-dark" : "text-primary"}`}>Save</Text>
         </TouchableOpacity>
       </View>
 
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        className={`flex-1 ${isDark ? "bg-background-dark" : "bg-background-light"}`}
-      >
-        <ScrollView className="flex-1 p-6">
-          {/* Title Input */}
+      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} className="flex-1">
+        <ScrollView className="flex-1 p-4">
           <View className="mb-6">
-            <Text
-              className={`text-sm font-bold mb-2 ${isDark ? "text-zinc-400" : "text-zinc-500"}`}
-            >
-              TITLE
-            </Text>
-            <TextInput
-              value={title}
-              onChangeText={setTitle}
-              className={`text-2xl font-bold p-0 ${isDark ? "text-white" : "text-gray-900"}`}
-              placeholder="Task Title"
-              placeholderTextColor={isDark ? "#52525b" : "#d4d4d8"}
-              multiline
-            />
+            <TextInput value={title} onChangeText={setTitle} className="text-3xl font-display text-white p-0 tracking-tight" placeholder="Task Title" placeholderTextColor="#52555c" multiline />
           </View>
 
-          {/* Description Input */}
-          <View className="mb-8">
-            <Text
-              className={`text-sm font-bold mb-2 ${isDark ? "text-zinc-400" : "text-zinc-500"}`}
-            >
-              NOTES
-            </Text>
-            <TextInput
-              value={description}
-              onChangeText={setDescription}
-              multiline
-              className={`text-base p-0 h-40 ${isDark ? "text-gray-300" : "text-gray-700"}`}
-              placeholder="Add notes..."
-              placeholderTextColor={isDark ? "#52525b" : "#d4d4d8"}
-              textAlignVertical="top"
-            />
+          <View className="mb-8 bg-white/5 p-4 rounded-3xl border border-white/10">
+            <Text className="text-xs font-label text-text-muted-dark uppercase tracking-widest mb-2">Notes</Text>
+            <TextInput value={description} onChangeText={setDescription} multiline className="text-base font-body text-white p-0 h-32" placeholder="Add details..." placeholderTextColor="#52555c" textAlignVertical="top" />
           </View>
 
-          {/* Schedule Info Card */}
-          {(todo.scheduledTime ||
-            todo.type === "ROUTINE" ||
-            todo.reminderType === "NAGGING") && (
-            <View
-              className={`p-4 rounded-2xl mb-6 ${isDark ? "bg-card-dark" : "bg-white"}`}
+          <View className="mb-8 bg-card-dark p-6 rounded-3xl border border-white/10 items-center justify-center relative overflow-hidden">
+            {isTimerRunning && <View className="absolute inset-0 bg-primary/5" />}
+            <Text className="text-xs font-label text-primary uppercase tracking-widest mb-2">Deep Focus Timer</Text>
+            <Text className="text-6xl font-display text-white tracking-tighter mb-6">{formatTime(timeSpent)}</Text>
+            <TouchableOpacity
+              onPress={() => { haptics.light(); setIsTimerRunning(!isTimerRunning); }}
+              className={`px-8 py-3 rounded-full flex-row items-center justify-center ${isTimerRunning ? "bg-white/10" : "bg-primary"}`}
+              style={!isTimerRunning ? { shadowColor: "#c799ff", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.5, shadowRadius: 10 } : {}}
             >
-              <View className="flex-row items-center gap-2 mb-3">
-                <Ionicons
-                  name="calendar"
-                  size={20}
-                  color={isDark ? "#a1a1aa" : "#71717a"}
-                />
-                <Text
-                  className={`font-bold ${isDark ? "text-white" : "text-gray-900"}`}
-                >
-                  Schedule Details
-                </Text>
-              </View>
+              <Ionicons name={isTimerRunning ? "pause" : "play"} size={20} color={isTimerRunning ? "#fff" : "#0b0e14"} />
+              <Text className={`ml-2 font-label uppercase tracking-widest text-sm ${isTimerRunning ? "text-white" : "text-background-dark"}`}>{isTimerRunning ? "Pause" : "Start Focus"}</Text>
+            </TouchableOpacity>
+          </View>
 
-              {todo.scheduledTime && (
-                <View className="flex-row justify-between mb-2">
-                  <Text className={isDark ? "text-zinc-400" : "text-zinc-500"}>
-                    Time
-                  </Text>
-                  <Text
-                    className={`font-medium ${isDark ? "text-zinc-200" : "text-zinc-800"}`}
-                  >
-                    {new Date(todo.scheduledTime).toLocaleTimeString([], {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
-                  </Text>
-                </View>
-              )}
-
-              <View className="flex-row justify-between mb-2">
-                <Text className={isDark ? "text-zinc-400" : "text-zinc-500"}>
-                  Duration
-                </Text>
-                <Text
-                  className={`font-medium ${isDark ? "text-zinc-200" : "text-zinc-800"}`}
-                >
-                  {todo.duration || 30} min
-                </Text>
-              </View>
-
-              {todo.reminderType === "NAGGING" && (
-                <View className="flex-row justify-between mt-2 pt-2 border-t border-zinc-100 dark:border-zinc-800">
-                  <Text className="text-red-500 font-medium">
-                    Nag Mode Active
-                  </Text>
-                  <Text className="text-red-500">
-                    Every {todo.nagInterval || 5}m
-                  </Text>
-                </View>
-              )}
-
-              {/* Nag Duration Display */}
-              {todo.reminderType === "NAGGING" && todo.nagDuration && (
-                <View className="flex-row justify-between mb-2">
-                  <Text className={isDark ? "text-zinc-400" : "text-zinc-500"}>
-                    Stop After
-                  </Text>
-                  <Text
-                    className={`font-medium ${isDark ? "text-zinc-200" : "text-zinc-800"}`}
-                  >
-                    {todo.nagDuration < 60
-                      ? `${todo.nagDuration} min`
-                      : `${Math.floor(todo.nagDuration / 60)}h ${todo.nagDuration % 60 > 0 ? (todo.nagDuration % 60) + "m" : ""}`}
-                  </Text>
-                </View>
-              )}
-            </View>
-          )}
-
-          {/* Action Buttons */}
-          <TouchableOpacity
-            onPress={toggleComplete}
-            className={`flex-row items-center justify-center p-4 rounded-xl mb-4 ${
-              isCompleted
-                ? "bg-green-100 dark:bg-green-900/20 border border-green-200 dark:border-green-900/30"
-                : "bg-primary"
-            }`}
-          >
-            <Ionicons
-              name={isCompleted ? "checkmark-circle" : "ellipse-outline"}
-              size={24}
-              color={isCompleted ? "#16a34a" : "white"}
-            />
-            <Text
-              className={`ml-2 font-bold text-lg ${isCompleted ? "text-green-600" : "text-white"}`}
-            >
-              {isCompleted ? "Completed" : "Mark as Done"}
-            </Text>
+          <TouchableOpacity onPress={() => { haptics.light(); setIsCompleted(!isCompleted); }}
+            className={`flex-row items-center justify-center p-5 rounded-3xl mb-4 ${isCompleted ? "bg-secondary/20 border border-secondary/30" : "bg-white/5 border border-white/10"}`}>
+            <Ionicons name={isCompleted ? "checkmark-circle" : "ellipse-outline"} size={24} color={isCompleted ? "#00e3fd" : "#a9abb3"} />
+            <Text className={`ml-3 font-display text-lg tracking-wide ${isCompleted ? "text-secondary" : "text-white"}`}>{isCompleted ? "Task Completed" : "Mark as Done"}</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity
-            onPress={handleDelete}
-            className="flex-row items-center justify-center p-4 rounded-xl border border-red-200 bg-red-50 dark:bg-red-900/10 dark:border-red-900/30"
-          >
-            <Ionicons name="trash-outline" size={20} color="#ef4444" />
-            <Text className="ml-2 font-bold text-red-500">Delete Task</Text>
+          <TouchableOpacity onPress={handleDelete} className="flex-row items-center justify-center p-5 rounded-3xl bg-red-500/10 border border-red-500/20">
+            <Ionicons name="trash-outline" size={20} color="#ff6e84" />
+            <Text className="ml-2 font-display text-lg text-red-400 tracking-wide">Delete</Text>
           </TouchableOpacity>
+          <View className="h-10" />
         </ScrollView>
       </KeyboardAvoidingView>
-      <CustomAlert {...alertProps} />
     </SafeAreaView>
   );
 }

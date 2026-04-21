@@ -6,9 +6,14 @@
     "start": "expo start",
     "android": "expo start --android",
     "ios": "expo start --ios",
-    "web": "expo start --web"
+    "web": "expo start --web",
+    "postinstall": "node fix-zustand.js",
+    "build": "npx eas-cli build -p android --profile apk"
   },
   "dependencies": {
+    "@expo-google-fonts/inter": "^0.4.2",
+    "@expo-google-fonts/outfit": "^0.4.3",
+    "@expo-google-fonts/space-grotesk": "^0.4.1",
     "@expo/metro-runtime": "~6.1.2",
     "@react-native-async-storage/async-storage": "2.2.0",
     "@react-native-community/datetimepicker": "8.4.4",
@@ -16,9 +21,11 @@
     "@react-navigation/bottom-tabs": "^7.12.0",
     "@react-navigation/native": "^7.1.28",
     "@react-navigation/stack": "^7.7.0",
+    "@tanstack/react-query": "^5.99.2",
     "axios": "^1.13.4",
     "babel-preset-expo": "~54.0.10",
     "expo": "~54.0.33",
+    "expo-blur": "^55.0.14",
     "expo-constants": "~18.0.13",
     "expo-dev-client": "~6.0.20",
     "expo-device": "~8.0.10",
@@ -32,13 +39,21 @@
     "react": "19.1.0",
     "react-dom": "19.1.0",
     "react-native": "0.81.5",
+    "react-native-animatable": "^1.4.0",
     "react-native-calendars": "^1.1314.0",
     "react-native-chart-kit": "^6.12.0",
+    "react-native-reanimated": "^4.3.0",
     "react-native-safe-area-context": "~5.6.0",
     "react-native-screens": "~4.16.0",
     "react-native-svg": "15.12.1",
+    "react-native-toast-message": "^2.3.3",
     "react-native-web": "^0.21.0",
-    "tailwindcss": "^3.4.19"
+    "react-native-worklets-core": "^1.6.3",
+    "tailwindcss": "^3.4.19",
+    "zustand": "^5.0.12"
   },
-  "private": true
+  "private": true,
+  "devDependencies": {
+    "babel-plugin-transform-import-meta": "^2.3.3"
+  }
 }
