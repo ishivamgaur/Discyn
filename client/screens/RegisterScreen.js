@@ -7,17 +7,20 @@ import {
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
+  ScrollView,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Toast from "react-native-toast-message";
 import haptics from "../services/hapticsService";
 import { useAuthStore } from "../store/useAuthStore";
+import GlassBackground from "../components/GlassBackground";
 
 export default function RegisterScreen({ navigation }) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
 
   const register = useAuthStore((state) => state.register);
@@ -25,7 +28,11 @@ export default function RegisterScreen({ navigation }) {
   const handleRegister = async () => {
     if (!name || !email || !password) {
       haptics.error();
-      Toast.show({ type: "error", text1: "Error", text2: "Please fill all fields" });
+      Toast.show({
+        type: "error",
+        text1: "Error",
+        text2: "Please fill all fields",
+      });
       return;
     }
 
@@ -58,70 +65,104 @@ export default function RegisterScreen({ navigation }) {
 
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : "height"}
-        className="flex-1 px-4 justify-center pb-16"
+        className="flex-1 pb-16"
       >
-        <View className="w-full max-w-sm self-center">
-        <View className="mb-10">
-          <Text className="text-4xl font-display text-white tracking-tighter mb-2">
-            Create Profile
-          </Text>
-          <Text className="text-sm font-label text-text-muted-dark uppercase tracking-widest">
-            Join Discyn
-          </Text>
-        </View>
-
-        <View className="space-y-4">
-          <View className="bg-white/5 border border-white/10 rounded-2xl flex-row items-center px-4 h-14">
-            <Ionicons name="person-outline" size={20} color="#a9abb3" />
-            <TextInput
-              className="flex-1 ml-3 text-white font-body text-base h-full"
-              placeholder="Operator Alias"
-              placeholderTextColor="#52555c"
-              value={name}
-              onChangeText={setName}
-            />
-          </View>
-
-          <View className="bg-white/5 border border-white/10 rounded-2xl flex-row items-center px-4 h-14 mt-4">
-            <Ionicons name="mail-outline" size={20} color="#a9abb3" />
-            <TextInput
-              className="flex-1 ml-3 text-white font-body text-base h-full"
-              placeholder="System Email"
-              placeholderTextColor="#52555c"
-              value={email}
-              onChangeText={setEmail}
-              autoCapitalize="none"
-              keyboardType="email-address"
-            />
-          </View>
-
-          <View className="bg-white/5 border border-white/10 rounded-2xl flex-row items-center px-4 h-14 mt-4">
-            <Ionicons name="lock-closed-outline" size={20} color="#a9abb3" />
-            <TextInput
-              className="flex-1 ml-3 text-white font-body text-base h-full"
-              placeholder="Secure Passcode"
-              placeholderTextColor="#52555c"
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry
-            />
-          </View>
-
-          <TouchableOpacity
-            onPress={handleRegister}
-            disabled={loading}
-            className="w-full bg-secondary h-14 rounded-2xl items-center justify-center mt-8 shadow-lg shadow-secondary/30"
-          >
-            {loading ? (
-              <ActivityIndicator color="#0b0e14" />
-            ) : (
-              <Text className="text-[#0b0e14] font-display text-lg tracking-wider">
-                Authenticate Profile
+        <ScrollView
+          contentContainerStyle={{ flexGrow: 1, justifyContent: "center" }}
+          keyboardShouldPersistTaps="handled"
+          className="px-4"
+        >
+          <View className="w-full max-w-sm self-center">
+            <View className="mb-10">
+              <Text className="text-4xl font-display text-white tracking-tighter mb-2">
+                Create Profile
               </Text>
-            )}
-          </TouchableOpacity>
-        </View>
-        </View>
+              <Text className="text-sm font-label text-text-muted-dark uppercase tracking-widest">
+                Join Discyn
+              </Text>
+            </View>
+
+            <View className="space-y-4">
+              <View className="border border-white/10 rounded-2xl flex-row items-center px-4 h-14 relative overflow-hidden">
+                <GlassBackground />
+                <Ionicons
+                  name="person-outline"
+                  size={20}
+                  color="#a9abb3"
+                  className="z-10"
+                />
+                <TextInput
+                  className="flex-1 ml-3 text-white font-body text-base h-full z-10"
+                  placeholder="Operator Alias"
+                  placeholderTextColor="#52555c"
+                  value={name}
+                  onChangeText={setName}
+                />
+              </View>
+
+              <View className="border border-white/10 rounded-2xl flex-row items-center px-4 h-14 mt-4 relative overflow-hidden">
+                <GlassBackground />
+                <Ionicons
+                  name="mail-outline"
+                  size={20}
+                  color="#a9abb3"
+                  className="z-10"
+                />
+                <TextInput
+                  className="flex-1 ml-3 text-white font-body text-base h-full z-10"
+                  placeholder="System Email"
+                  placeholderTextColor="#52555c"
+                  value={email}
+                  onChangeText={setEmail}
+                  autoCapitalize="none"
+                  keyboardType="email-address"
+                />
+              </View>
+
+              <View className="border border-white/10 rounded-2xl flex-row items-center px-4 h-14 mt-4 relative overflow-hidden">
+                <GlassBackground />
+                <Ionicons
+                  name="lock-closed-outline"
+                  size={20}
+                  color="#a9abb3"
+                  className="z-10"
+                />
+                <TextInput
+                  className="flex-1 ml-3 text-white font-body text-base h-full z-10"
+                  placeholder="Secure Passcode"
+                  placeholderTextColor="#52555c"
+                  value={password}
+                  onChangeText={setPassword}
+                  secureTextEntry={!showPassword}
+                />
+                <TouchableOpacity
+                  onPress={() => setShowPassword(!showPassword)}
+                  className="p-2"
+                >
+                  <Ionicons
+                    name={showPassword ? "eye-off-outline" : "eye-outline"}
+                    size={20}
+                    color="#a9abb3"
+                  />
+                </TouchableOpacity>
+              </View>
+
+              <TouchableOpacity
+                onPress={handleRegister}
+                disabled={loading}
+                className="w-full bg-secondary h-14 rounded-2xl items-center justify-center mt-8 shadow-lg shadow-secondary/30"
+              >
+                {loading ? (
+                  <ActivityIndicator color="#0b0e14" />
+                ) : (
+                  <Text className="text-[#0b0e14] font-display text-lg tracking-wider">
+                    Authenticate Profile
+                  </Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );

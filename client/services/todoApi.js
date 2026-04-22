@@ -24,8 +24,10 @@ export const deleteTodo = async (id) => {
   return id;
 };
 
-export const fetchStats = async (range) => {
-  const { data } = await api.get(`/todos/stats?range=${range}`);
+export const fetchStats = async (range, year) => {
+  const { data } = await api.get(
+    `/todos/stats?range=${range}${year ? `&year=${year}` : ""}`,
+  );
   return data;
 };
 

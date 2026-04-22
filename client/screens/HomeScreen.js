@@ -8,6 +8,7 @@ import {
   LayoutAnimation,
   Platform,
   UIManager,
+  StyleSheet,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -19,6 +20,7 @@ import Animated, {
 } from "react-native-reanimated";
 import { useTodos, useToggleComplete } from "../hooks/useTodos";
 import { useAuthStore } from "../store/useAuthStore";
+import GlassBackground from "../components/GlassBackground";
 
 if (
   Platform.OS === "android" &&
@@ -48,16 +50,16 @@ const calcStreak = (history = []) => {
     if (dateStr === checkDate.toISOString().slice(0, 10)) {
       streak++;
       checkDate.setDate(checkDate.getDate() - 1);
-    } else {
-      break;
-    }
+    } else break;
   }
   return streak;
 };
 
+const PRIORITY_COLOR = { HIGH: "#ff6e84", MEDIUM: "#f59e0b", LOW: "#10b981" };
+
 export default function HomeScreen({ navigation }) {
   const { user } = useAuthStore();
-  const userName = user?.name || "Shivam";
+  const userName = user?.name?.split(" ")[0] || "there";
   const { data: todos = [], isLoading, refetch, isRefetching } = useTodos();
   const toggleCompleteMutation = useToggleComplete();
 
@@ -70,7 +72,6 @@ export default function HomeScreen({ navigation }) {
   const tasks = todos.filter((t) => !t.isRecurring);
   const activeTasks = tasks.filter((t) => !t.isCompleted);
   const completedTasks = tasks.filter((t) => t.isCompleted);
-
   const routinesDone = routines.filter((t) => t.isCompleted).length;
   const routinesTotal = routines.length;
   const routinePercent =
@@ -93,54 +94,50 @@ export default function HomeScreen({ navigation }) {
   const greeting =
     hour < 12 ? "Good Morning" : hour < 17 ? "Good Afternoon" : "Good Evening";
 
-  const renderTask = (item) => (
+  const TaskRow = ({ item }) => (
     <TouchableOpacity
-      key={item._id}
       activeOpacity={0.7}
       onPress={() => navigation.navigate("TodoDetail", { todo: item })}
-      className={`flex-row items-center py-4 px-1 ${item.isCompleted ? "opacity-40" : "opacity-100"}`}
+      style={[styles.taskRow, item.isCompleted && { opacity: 0.4 }]}
     >
       <TouchableOpacity
         onPress={() => toggleComplete(item)}
-        className={`w-6 h-6 rounded-lg border-2 items-center justify-center mr-3 ${
-          item.isCompleted ? "bg-secondary border-secondary" : "border-white/20"
-        }`}
-        style={
-          item.isCompleted
-            ? {
-                shadowColor: "#00e3fd",
-                shadowOffset: { width: 0, height: 0 },
-                shadowOpacity: 0.6,
-                shadowRadius: 6,
-                elevation: 4,
-              }
-            : {}
-        }
+        style={[styles.checkbox, item.isCompleted && styles.checkboxDone]}
       >
         {item.isCompleted && (
-          <Ionicons name="checkmark" size={14} color="#0b0e14" />
+          <Ionicons name="checkmark" size={13} color="#0b0e14" />
         )}
       </TouchableOpacity>
-      <View className="flex-1">
+      <View style={styles.taskInfo}>
         <Text
-          className={`text-sm font-body ${item.isCompleted ? "text-text-muted-dark line-through" : "text-white"}`}
+          style={[styles.taskTitle, item.isCompleted && styles.taskTitleDone]}
         >
           {item.title}
         </Text>
+        {item.description ? (
+          <Text style={styles.taskSubtitle} numberOfLines={1}>
+            {item.description}
+          </Text>
+        ) : null}
       </View>
       {item.priority === "HIGH" && (
-        <View className="bg-red-500/15 px-2 py-0.5 rounded-md ml-2">
-          <Text className="text-[10px] font-label uppercase text-red-400 tracking-wider">
-            High
-          </Text>
+        <View style={styles.priorityPill}>
+          <Text style={styles.priorityPillText}>High</Text>
         </View>
       )}
-      <Ionicons name="chevron-forward" size={14} color="#3a3d44" />
+      <Ionicons name="chevron-forward" size={13} color="#2e3139" />
     </TouchableOpacity>
   );
 
+  const SectionHeader = ({ dot, label }) => (
+    <View style={styles.sectionHeader}>
+      <View style={[styles.sectionDot, { backgroundColor: dot }]} />
+      <Text style={styles.sectionLabel}>{label}</Text>
+    </View>
+  );
+
   return (
-    <SafeAreaView className="flex-1 bg-background-dark" edges={["top"]}>
+    <SafeAreaView edges={["top"]} style={styles.root}>
       <ScrollView
         contentContainerStyle={{ paddingBottom: 120 }}
         showsVerticalScrollIndicator={false}
@@ -152,22 +149,19 @@ export default function HomeScreen({ navigation }) {
           />
         }
       >
-        {/* ── Header ─────────────────────────────────────── */}
-        <View className="px-4 pt-6 pb-8">
-          <Text className="text-sm font-body text-text-muted-dark mb-1">
-            {greeting}
-          </Text>
-          <Text className="text-3xl font-display text-white tracking-tight">
-            Hello, {userName} 👋
-          </Text>
+        {/* Header */}
+        <View style={styles.header}>
+          <Text style={styles.greeting}>{greeting}</Text>
+          <Text style={styles.headline}>Hello, Shivam 👋</Text>
         </View>
 
-        {/* ── Daily Routine Progress ─────────────────────── */}
+        {/* Routine Progress Card */}
         {routinesTotal > 0 && (
-          <View className="mx-4 mt-2 mb-10 p-5 rounded-[24px] bg-white/[0.03] border border-white/[0.06]">
-            <View className="flex-row items-center">
-              <View className="relative items-center justify-center mr-6">
-                <Svg width="84" height="84" viewBox="0 0 120 120">
+          <View style={styles.progressCard}>
+            <GlassBackground />
+            <View style={styles.progressInner}>
+              <View style={styles.ringWrap}>
+                <Svg width={80} height={80} viewBox="0 0 120 120">
                   <Circle
                     cx="60"
                     cy="60"
@@ -189,42 +183,34 @@ export default function HomeScreen({ navigation }) {
                     transform="rotate(-90 60 60)"
                   />
                 </Svg>
-                <View className="absolute items-center justify-center">
-                  <Text className="text-xl font-display text-white">
-                    {routinePercent}%
-                  </Text>
+                <View style={styles.ringLabel}>
+                  <Text style={styles.ringPercent}>{routinePercent}%</Text>
                 </View>
               </View>
-              <View className="flex-1">
-                <Text className="text-xs font-label text-text-muted-dark uppercase tracking-widest mb-2">
-                  Daily Routines
-                </Text>
-                <View className="flex-row items-baseline mb-0.5">
-                  <Text className="text-2xl font-display text-white">
-                    {routinesDone}
-                  </Text>
-                  <Text className="text-sm font-body text-text-muted-dark ml-1">
+              <View style={styles.progressMeta}>
+                <Text style={styles.progressMetaLabel}>Daily Routines</Text>
+                <Text style={styles.progressMetaCount}>
+                  <Text style={styles.progressMetaBig}>{routinesDone}</Text>
+                  <Text style={styles.progressMetaTotal}>
+                    {" "}
                     / {routinesTotal}
                   </Text>
-                </View>
-                <Text className="text-xs font-body text-text-muted-dark">
-                  completed today
                 </Text>
+                <Text style={styles.progressMetaSub}>completed today</Text>
               </View>
             </View>
           </View>
         )}
 
-        {/* ── Routines Checklist ──────────────────────────── */}
+        {/* Routines List */}
         {routines.length > 0 && (
-          <View className="mx-4 mb-10">
-            <View className="flex-row items-center gap-2 mb-4 px-1">
-              <View className="w-1.5 h-1.5 rounded-full bg-secondary" />
-              <Text className="text-xs font-label text-text-muted-dark uppercase tracking-widest">
-                Routines — {routinesDone}/{routinesTotal}
-              </Text>
-            </View>
-            <View className="bg-white/[0.03] border border-white/[0.06] rounded-[20px] px-4 py-1">
+          <View style={styles.section}>
+            <SectionHeader
+              dot="#00e3fd"
+              label={`Routines — ${routinesDone}/${routinesTotal}`}
+            />
+            <View style={styles.listCard}>
+              <GlassBackground />
               {routines.map((item, i) => (
                 <View key={item._id}>
                   <TouchableOpacity
@@ -232,61 +218,63 @@ export default function HomeScreen({ navigation }) {
                     onPress={() =>
                       navigation.navigate("TodoDetail", { todo: item })
                     }
-                    className={`flex-row items-center py-4 ${item.isCompleted ? "opacity-40" : "opacity-100"}`}
+                    style={[
+                      styles.taskRow,
+                      item.isCompleted && { opacity: 0.4 },
+                    ]}
                   >
                     <TouchableOpacity
                       onPress={() => toggleComplete(item)}
-                      className={`w-6 h-6 rounded-lg border-2 items-center justify-center mr-3 ${
-                        item.isCompleted
-                          ? "bg-secondary border-secondary"
-                          : "border-white/20"
-                      }`}
+                      style={[
+                        styles.checkbox,
+                        item.isCompleted && styles.checkboxDone,
+                      ]}
                     >
                       {item.isCompleted && (
-                        <Ionicons name="checkmark" size={14} color="#0b0e14" />
+                        <Ionicons name="checkmark" size={13} color="#0b0e14" />
                       )}
                     </TouchableOpacity>
-                    <View className="flex-1">
+                    <View style={styles.taskInfo}>
                       <Text
-                        className={`text-sm font-body ${item.isCompleted ? "text-text-muted-dark line-through" : "text-white"}`}
+                        style={[
+                          styles.taskTitle,
+                          item.isCompleted && styles.taskTitleDone,
+                        ]}
                       >
                         {item.title}
                       </Text>
                     </View>
                     {calcStreak(item.completionHistory) > 0 && (
-                      <View className="flex-row items-center bg-orange-500/10 px-2 py-0.5 rounded-md mr-1">
-                        <Ionicons name="flame" size={12} color="#f97316" />
-                        <Text className="text-[10px] font-label text-orange-400 ml-0.5">
+                      <View style={styles.streakBadge}>
+                        <Ionicons name="flame" size={11} color="#f97316" />
+                        <Text style={styles.streakText}>
                           {calcStreak(item.completionHistory)}d
                         </Text>
                       </View>
                     )}
-                    <Ionicons name="repeat" size={14} color="#52555c" />
+                    <Ionicons name="repeat" size={13} color="#2e3139" />
                   </TouchableOpacity>
-                  {i < routines.length - 1 && (
-                    <View className="h-px bg-white/[0.05]" />
-                  )}
+                  {i < routines.length - 1 && <View style={styles.divider} />}
                 </View>
               ))}
             </View>
           </View>
         )}
 
-        {/* ── Active Tasks ───────────────────────────────── */}
+        {/* Active Tasks */}
         {activeTasks.length > 0 && (
-          <View className="mx-4 mb-10">
-            <View className="flex-row items-center gap-2 mb-4 px-1">
-              <View className="w-1.5 h-1.5 rounded-full bg-primary" />
-              <Text className="text-xs font-label text-text-muted-dark uppercase tracking-widest">
-                Active Tasks — {activeTasks.length}
-              </Text>
-            </View>
-            <View className="bg-white/[0.03] border border-white/[0.06] rounded-[20px] px-4 py-1">
+          <View style={styles.section}>
+            <SectionHeader
+              dot="#c799ff"
+              label={`Active — ${activeTasks.length}`}
+            />
+            <View style={styles.listCard}>
+              <GlassBackground />
               {activeTasks.map((item, i) => (
                 <View key={item._id}>
-                  {renderTask(item)}
+                  <TaskRow item={item} />
                   {i < activeTasks.length - 1 && (
-                    <View className="h-px bg-white/[0.05]" />
+                    <View style={styles.divider} />
                   )}
                 </View>
               ))}
@@ -294,21 +282,20 @@ export default function HomeScreen({ navigation }) {
           </View>
         )}
 
-        {/* ── Completed Tasks ────────────────────────────── */}
+        {/* Completed */}
         {completedTasks.length > 0 && (
-          <View className="mx-4 mb-10">
-            <View className="flex-row items-center gap-2 mb-4 px-1">
-              <View className="w-1.5 h-1.5 rounded-full bg-green-500" />
-              <Text className="text-xs font-label text-text-muted-dark uppercase tracking-widest">
-                Done — {completedTasks.length}
-              </Text>
-            </View>
-            <View className="bg-white/[0.03] border border-white/[0.06] rounded-[20px] px-4 py-1">
+          <View style={styles.section}>
+            <SectionHeader
+              dot="#10b981"
+              label={`Done — ${completedTasks.length}`}
+            />
+            <View style={styles.listCard}>
+              <GlassBackground />
               {completedTasks.map((item, i) => (
                 <View key={item._id}>
-                  {renderTask(item)}
+                  <TaskRow item={item} />
                   {i < completedTasks.length - 1 && (
-                    <View className="h-px bg-white/[0.05]" />
+                    <View style={styles.divider} />
                   )}
                 </View>
               ))}
@@ -317,28 +304,204 @@ export default function HomeScreen({ navigation }) {
         )}
 
         {todos.length === 0 && !isLoading && (
-          <View className="items-center py-20 opacity-40 mx-4">
-            <Ionicons name="leaf-outline" size={48} color="#45484f" />
-            <Text className="mt-4 text-text-muted-dark font-body text-sm text-center leading-6">
+          <View style={styles.emptyState}>
+            <Ionicons name="leaf-outline" size={48} color="#2e3139" />
+            <Text style={styles.emptyText}>
               Your day is clear.{"\n"}Tap + to add your first task.
             </Text>
           </View>
         )}
       </ScrollView>
+
+      {/* FAB */}
       <TouchableOpacity
-        activeOpacity={0.8}
+        activeOpacity={0.85}
         onPress={() => navigation.navigate("AddTodo", { type: "task" })}
-        className="absolute bottom-8 right-6 w-16 h-16 rounded-full bg-primary items-center justify-center"
-        style={{
-          shadowColor: "#c799ff",
-          shadowOffset: { width: 0, height: 6 },
-          shadowOpacity: 0.6,
-          shadowRadius: 16,
-          elevation: 10,
-        }}
+        style={styles.fab}
       >
-        <Ionicons name="add" size={32} color="#0b0e14" />
+        <Ionicons name="add" size={30} color="#0b0e14" />
       </TouchableOpacity>
     </SafeAreaView>
   );
 }
+
+const styles = StyleSheet.create({
+  root: { flex: 1, backgroundColor: "#0b0e14" },
+  header: { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 20 },
+  greeting: {
+    fontSize: 11,
+    color: "#c799ff",
+    fontFamily: "Inter_600SemiBold",
+    textTransform: "uppercase",
+    letterSpacing: 2,
+    marginBottom: 4,
+  },
+  headline: {
+    fontSize: 30,
+    color: "#fff",
+    fontFamily: "Outfit_700Bold",
+    letterSpacing: -0.5,
+  },
+
+  // Progress card
+  progressCard: {
+    marginHorizontal: 16,
+    marginBottom: 24,
+    padding: 18,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.06)",
+    overflow: "hidden",
+    position: "relative",
+  },
+  progressInner: { flexDirection: "row", alignItems: "center" },
+  ringWrap: {
+    width: 80,
+    height: 80,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 18,
+  },
+  ringLabel: {
+    position: "absolute",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  ringPercent: { fontSize: 16, color: "#fff", fontFamily: "Outfit_700Bold" },
+  progressMeta: { flex: 1 },
+  progressMetaLabel: {
+    fontSize: 10,
+    color: "#52555c",
+    fontFamily: "Inter_500Medium",
+    textTransform: "uppercase",
+    letterSpacing: 1.5,
+    marginBottom: 4,
+  },
+  progressMetaCount: { marginBottom: 2 },
+  progressMetaBig: {
+    fontSize: 24,
+    color: "#fff",
+    fontFamily: "Outfit_700Bold",
+  },
+  progressMetaTotal: {
+    fontSize: 14,
+    color: "#52555c",
+    fontFamily: "Inter_400Regular",
+  },
+  progressMetaSub: {
+    fontSize: 12,
+    color: "#52555c",
+    fontFamily: "Inter_400Regular",
+  },
+
+  // Sections
+  section: { marginHorizontal: 16, marginBottom: 24 },
+  sectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 10,
+  },
+  sectionDot: { width: 5, height: 5, borderRadius: 3, marginRight: 8 },
+  sectionLabel: {
+    fontSize: 10,
+    color: "#52555c",
+    fontFamily: "Inter_600SemiBold",
+    textTransform: "uppercase",
+    letterSpacing: 1.8,
+  },
+  listCard: {
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.06)",
+    overflow: "hidden",
+    position: "relative",
+    paddingHorizontal: 14,
+  },
+
+  // Task row
+  taskRow: { flexDirection: "row", alignItems: "center", paddingVertical: 14 },
+  taskInfo: { flex: 1, marginLeft: 12 },
+  taskTitle: { fontSize: 14, color: "#ecedf6", fontFamily: "Inter_500Medium" },
+  taskTitleDone: { color: "#45484f", textDecorationLine: "line-through" },
+  taskSubtitle: {
+    fontSize: 12,
+    color: "#45484f",
+    fontFamily: "Inter_400Regular",
+    marginTop: 2,
+  },
+  checkbox: {
+    width: 22,
+    height: 22,
+    borderRadius: 8,
+    borderWidth: 1.5,
+    borderColor: "rgba(255,255,255,0.15)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  checkboxDone: { backgroundColor: "#00e3fd", borderColor: "#00e3fd" },
+  divider: { height: 1, backgroundColor: "rgba(255,255,255,0.04)" },
+
+  // Badges
+  priorityPill: {
+    backgroundColor: "rgba(255,110,132,0.12)",
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+    marginRight: 8,
+  },
+  priorityPillText: {
+    fontSize: 9,
+    color: "#ff6e84",
+    fontFamily: "Inter_600SemiBold",
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
+  },
+  streakBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(249,115,22,0.1)",
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 8,
+    marginRight: 8,
+    gap: 3,
+  },
+  streakText: {
+    fontSize: 10,
+    color: "#f97316",
+    fontFamily: "Inter_600SemiBold",
+  },
+
+  // Empty
+  emptyState: {
+    alignItems: "center",
+    paddingVertical: 80,
+    paddingHorizontal: 40,
+  },
+  emptyText: {
+    marginTop: 16,
+    color: "#3a3d45",
+    fontFamily: "Inter_400Regular",
+    fontSize: 14,
+    textAlign: "center",
+    lineHeight: 22,
+  },
+
+  // FAB
+  fab: {
+    position: "absolute",
+    bottom: 28,
+    right: 20,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: "#c799ff",
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#c799ff",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.5,
+    shadowRadius: 20,
+    elevation: 16,
+  },
+});

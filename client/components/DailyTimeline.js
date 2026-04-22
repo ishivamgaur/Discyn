@@ -202,11 +202,11 @@ export default function DailyTimeline({ tasks, onTaskPress }) {
               className={`rounded-xl px-3 py-1.5 justify-center border-l-[3px] ${
                 isDone
                   ? isDark
-                    ? "bg-zinc-900 border-zinc-600"
+                    ? "bg-white/5 border-white/10"
                     : "bg-zinc-100 border-zinc-400"
                   : isDark
-                    ? "bg-purple-900/20 border-purple-500"
-                    : "bg-white border-purple-500"
+                    ? "bg-primary/10 border-primary/50"
+                    : "bg-white border-primary"
               }`}
             >
               <Text

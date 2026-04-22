@@ -154,26 +154,26 @@ export const deleteTodo = asyncHandler(async (req, res) => {
 // @route   GET /api/todos/stats
 // @access  Private
 export const getStats = asyncHandler(async (req, res) => {
-  const { range, timezoneOffset = 0 } = req.query; // timezoneOffset in minutes
+  const { range, year, timezoneOffset = 0 } = req.query; // timezoneOffset in minutes
   const userId = req.user._id;
   const now = new Date();
 
   // 1. Determine Date Range & Format for Graphs
   let startDate = new Date();
+  let endDate = new Date();
   let groupByFormat = "%Y-%m-%d";
 
   if (range === "weekly") {
     startDate.setDate(now.getDate() - 6);
     startDate.setHours(0, 0, 0, 0);
   } else if (range === "monthly") {
-    // Start of *current* month? Or last 30 days? User asked for "daily wise graph"
-    // Usually "Monthly" view implies the calendar month.
     startDate.setDate(1);
     startDate.setHours(0, 0, 0, 0);
   } else if (range === "yearly") {
-    startDate.setMonth(0, 1);
-    startDate.setHours(0, 0, 0, 0);
-    groupByFormat = "%Y-%m-%d"; // For heatmap, we still need daily granularity
+    const selectedYear = parseInt(year) || now.getFullYear();
+    startDate = new Date(selectedYear, 0, 1, 0, 0, 0, 0);
+    endDate = new Date(selectedYear, 11, 31, 23, 59, 59, 999);
+    groupByFormat = "%Y-%m-%d";
   }
 
   // 2. Main Stats Aggregation (for the specific range graph)
@@ -201,7 +201,7 @@ export const getStats = asyncHandler(async (req, res) => {
       },
     },
     { $unwind: "$allCompletions" },
-    { $match: { allCompletions: { $gte: startDate } } }, // Filter by range
+    { $match: { allCompletions: { $gte: startDate, $lte: endDate } } }, // Filter by range
     {
       $group: {
         _id: {

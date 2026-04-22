@@ -1,83 +1,215 @@
 import React from "react";
-import { View, Text, TouchableOpacity, ScrollView, Platform } from "react-native";
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  ScrollView,
+  StyleSheet,
+} from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Toast from "react-native-toast-message";
 import { useAuthStore } from "../store/useAuthStore";
-import { BlurView } from "expo-blur";
-
-const GlassContainer = ({ children, className = "" }) => {
-  const isWeb = Platform.OS === "web";
-  return (
-    <View className={`rounded-[24px] overflow-hidden border border-white/10 ${className}`}>
-      {isWeb ? (
-        <View className="liquid-glass p-0">{children}</View>
-      ) : (
-        <BlurView intensity={25} tint="dark" className="p-0">
-          {children}
-        </BlurView>
-      )}
-    </View>
-  );
-};
+import GlassBackground from "../components/GlassBackground";
 
 export default function SettingsScreen() {
   const logout = useAuthStore((s) => s.logout);
-
   const handleLogout = async () => {
     try {
       await logout();
-    } catch (e) {
-      Toast.show({ type: "error", text1: "Error", text2: "Disconnection failed" });
+    } catch {
+      Toast.show({ type: "error", text1: "Logout failed" });
     }
   };
 
-  const SettingItem = ({ icon, color, title, subtitle, rightElement, onPress }) => (
-    <TouchableOpacity
-      activeOpacity={onPress ? 0.7 : 1}
-      onPress={onPress}
-      className="flex-row items-center justify-between p-5 border-b bg-white/5 border-white/10"
-    >
-      <View className="flex-row items-center gap-4">
-        <View className="w-10 h-10 rounded-xl items-center justify-center" style={{ backgroundColor: `${color}20` }}>
-          <Ionicons name={icon} size={20} color={color} />
-        </View>
-        <View>
-          <Text className="text-lg font-display text-white tracking-wide">{title}</Text>
-          {subtitle && <Text className="text-xs font-body text-text-muted-dark mt-0.5">{subtitle}</Text>}
-        </View>
-      </View>
-      {rightElement || <Ionicons name="chevron-forward" size={20} color="#52555c" />}
-    </TouchableOpacity>
-  );
+  const GROUPS = [
+    {
+      label: "Preferences",
+      items: [
+        {
+          icon: "notifications-outline",
+          color: "#00e3fd",
+          title: "Notifications",
+          subtitle: "Manage alerts and reminders",
+        },
+        {
+          icon: "shield-checkmark-outline",
+          color: "#10b981",
+          title: "Privacy & Data",
+          subtitle: "Storage and analytics controls",
+        },
+      ],
+    },
+    {
+      label: "Account",
+      items: [
+        {
+          icon: "person-outline",
+          color: "#c799ff",
+          title: "Profile",
+          subtitle: "Manage your identity",
+        },
+        {
+          icon: "cloud-outline",
+          color: "#3b82f6",
+          title: "Sync",
+          subtitle: "All data up to date",
+        },
+      ],
+    },
+  ];
 
   return (
-    <SafeAreaView edges={["top"]} className="flex-1 bg-background-dark">
-      <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 100 }}>
-        <View className="mb-12">
-          <Text className="text-sm font-label text-secondary uppercase tracking-widest mb-1">Configuration</Text>
-          <Text className="text-4xl font-display text-white tracking-tight">Settings</Text>
+    <SafeAreaView edges={["top"]} style={S.root}>
+      <ScrollView
+        contentContainerStyle={S.scroll}
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={S.header}>
+          <Text style={S.label}>Configuration</Text>
+          <Text style={S.title}>Settings</Text>
         </View>
 
-        <Text className="text-xs font-label uppercase tracking-widest mb-3 px-2 text-text-muted-dark">System Preferences</Text>
-        <View className="mb-8 rounded-3xl border border-white/10 overflow-hidden bg-card-dark">
-          <SettingItem icon="notifications" color="#00e3fd" title="Notifications" subtitle="Manage operational alerts" />
-          <SettingItem icon="shield-checkmark" color="#10b981" title="Privacy & Data" subtitle="Local storage and analytics" />
+        {GROUPS.map((g) => (
+          <View key={g.label} style={S.group}>
+            <Text style={S.groupLabel}>{g.label}</Text>
+            <View style={S.card}>
+              <GlassBackground />
+              {g.items.map((item, i) => (
+                <View key={item.title}>
+                  <TouchableOpacity activeOpacity={0.7} style={S.row}>
+                    <View
+                      style={[
+                        S.iconBox,
+                        { backgroundColor: item.color + "18" },
+                      ]}
+                    >
+                      <Ionicons name={item.icon} size={18} color={item.color} />
+                    </View>
+                    <View style={S.rowText}>
+                      <Text style={S.rowTitle}>{item.title}</Text>
+                      <Text style={S.rowSub}>{item.subtitle}</Text>
+                    </View>
+                    <Ionicons
+                      name="chevron-forward"
+                      size={15}
+                      color="#2e3139"
+                    />
+                  </TouchableOpacity>
+                  {i < g.items.length - 1 && <View style={S.divider} />}
+                </View>
+              ))}
+            </View>
+          </View>
+        ))}
+
+        <View style={S.group}>
+          <View style={S.card}>
+            <GlassBackground />
+            <TouchableOpacity
+              activeOpacity={0.7}
+              onPress={handleLogout}
+              style={S.row}
+            >
+              <View
+                style={[
+                  S.iconBox,
+                  { backgroundColor: "rgba(255,110,132,0.12)" },
+                ]}
+              >
+                <Ionicons name="log-out-outline" size={18} color="#ff6e84" />
+              </View>
+              <View style={S.rowText}>
+                <Text style={[S.rowTitle, { color: "#ff6e84" }]}>Sign Out</Text>
+                <Text style={S.rowSub}>End current session</Text>
+              </View>
+            </TouchableOpacity>
+          </View>
         </View>
 
-        <Text className="text-xs font-label uppercase tracking-widest mb-3 px-2 text-text-muted-dark">Account</Text>
-        <View className="mb-8 rounded-3xl border border-white/10 overflow-hidden bg-card-dark">
-          <SettingItem icon="person" color="#c799ff" title="Operator Profile" subtitle="Manage your identity" />
-          <SettingItem icon="cloud-sync" color="#3b82f6" title="Sync Status" subtitle="All protocols up to date" />
-          <SettingItem icon="log-out" color="#ff6e84" title="Disconnect" subtitle="End current session" onPress={handleLogout} rightElement={<View/>} />
-        </View>
-
-        <View className="items-center mt-6 opacity-50">
-          <Ionicons name="infinite" size={32} color="#c799ff" />
-          <Text className="text-white font-display mt-2 tracking-widest">Discyn v2.0</Text>
-          <Text className="text-text-muted-dark text-xs font-body mt-1">Organize. Focus. Achieve.</Text>
+        <View style={S.footer}>
+          <Ionicons name="infinite" size={22} color="#c799ff" />
+          <Text style={S.footerApp}>Discyn</Text>
+          <Text style={S.footerTagline}>Organize · Focus · Achieve</Text>
         </View>
       </ScrollView>
     </SafeAreaView>
   );
 }
+
+const S = StyleSheet.create({
+  root: { flex: 1, backgroundColor: "#0b0e14" },
+  scroll: { paddingBottom: 60 },
+  header: { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 24 },
+  label: {
+    fontSize: 11,
+    color: "#c799ff",
+    fontFamily: "Inter_600SemiBold",
+    textTransform: "uppercase",
+    letterSpacing: 2,
+    marginBottom: 4,
+  },
+  title: {
+    fontSize: 30,
+    color: "#fff",
+    fontFamily: "Outfit_700Bold",
+    letterSpacing: -0.5,
+  },
+  group: { marginHorizontal: 16, marginBottom: 20 },
+  groupLabel: {
+    fontSize: 10,
+    color: "#3a3d45",
+    fontFamily: "Inter_600SemiBold",
+    textTransform: "uppercase",
+    letterSpacing: 1.8,
+    marginBottom: 8,
+    paddingHorizontal: 4,
+  },
+  card: {
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.06)",
+    overflow: "hidden",
+    position: "relative",
+  },
+  row: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingVertical: 15,
+  },
+  iconBox: {
+    width: 36,
+    height: 36,
+    borderRadius: 11,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 14,
+  },
+  rowText: { flex: 1 },
+  rowTitle: {
+    fontSize: 14,
+    color: "#ecedf6",
+    fontFamily: "Inter_500Medium",
+    marginBottom: 2,
+  },
+  rowSub: { fontSize: 12, color: "#45484f", fontFamily: "Inter_400Regular" },
+  divider: {
+    height: 1,
+    backgroundColor: "rgba(255,255,255,0.04)",
+    marginLeft: 66,
+  },
+  footer: { alignItems: "center", paddingVertical: 28, gap: 5 },
+  footerApp: {
+    fontSize: 14,
+    color: "#fff",
+    fontFamily: "Outfit_700Bold",
+    letterSpacing: 2,
+  },
+  footerTagline: {
+    fontSize: 11,
+    color: "#3a3d45",
+    fontFamily: "Inter_400Regular",
+    letterSpacing: 0.8,
+  },
+});

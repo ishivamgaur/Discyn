@@ -5,97 +5,190 @@ import {
   FlatList,
   TouchableOpacity,
   RefreshControl,
-  LayoutAnimation,
-  Platform,
+  StyleSheet,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useTodos, useToggleComplete } from "../hooks/useTodos";
-import { BlurView } from "expo-blur";
+import GlassBackground from "../components/GlassBackground";
 
 export default function RoutinesScreen({ navigation }) {
   const { data: todos = [], isRefetching, refetch } = useTodos();
-  const toggleCompleteMutation = useToggleComplete();
-
+  const toggleMutation = useToggleComplete();
   const routines = todos.filter((t) => t.type === "ROUTINE" || t.isRecurring);
+  const done = routines.filter((t) => t.isCompleted).length;
 
-  const toggleRoutine = (item) => {
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    toggleCompleteMutation.mutate(item._id);
-  };
-
-  const renderRoutineItem = ({ item }) => {
-    return (
+  const renderItem = ({ item }) => (
+    <TouchableOpacity
+      activeOpacity={0.75}
+      onPress={() => navigation.navigate("TodoDetail", { todo: item })}
+      style={[S.item, item.isCompleted && { opacity: 0.45 }]}
+    >
+      <GlassBackground />
       <TouchableOpacity
-        key={item._id}
-        activeOpacity={0.7}
-        onPress={() => navigation.navigate("TodoDetail", { id: item._id })}
-        className="flex-row items-center p-5 mb-4 rounded-3xl bg-white/5 border border-white/10"
+        onPress={() => toggleMutation.mutate(item)}
+        style={[S.checkbox, item.isCompleted && S.checkboxDone]}
       >
-        <TouchableOpacity
-          onPress={() => toggleRoutine(item)}
-          className={`w-7 h-7 mr-4 rounded-xl border-2 items-center justify-center ${
-            item.isCompleted ? "bg-secondary border-secondary" : "border-border-dark"
-          }`}
-        >
-          {item.isCompleted && <Ionicons name="checkmark" size={18} color="#0b0e14" />}
-        </TouchableOpacity>
-
-        <View className="flex-1">
-          <Text
-            className={`text-lg font-display tracking-wide ${
-              item.isCompleted ? "text-text-muted-dark line-through" : "text-white"
-            }`}
-          >
-            {item.title}
-          </Text>
-        </View>
-
-        <View className="w-10 h-10 rounded-full bg-primary/20 items-center justify-center ml-2">
-          <Ionicons name="repeat" size={18} color="#c799ff" />
-        </View>
+        {item.isCompleted && (
+          <Ionicons name="checkmark" size={14} color="#0b0e14" />
+        )}
       </TouchableOpacity>
-    );
-  };
+      <View style={S.itemContent}>
+        <Text style={[S.itemTitle, item.isCompleted && S.itemTitleDone]}>
+          {item.title}
+        </Text>
+        {item.description ? (
+          <Text style={S.itemSub} numberOfLines={1}>
+            {item.description}
+          </Text>
+        ) : null}
+      </View>
+      <View style={S.repeatIcon}>
+        <Ionicons name="repeat" size={15} color="#c799ff" />
+      </View>
+    </TouchableOpacity>
+  );
 
   return (
-    <SafeAreaView edges={["top"]} className="flex-1 bg-background-dark">
-      <View className="px-4 pt-4 pb-10 flex-row justify-between items-center">
-        <View>
-          <Text className="text-sm font-label text-secondary uppercase tracking-widest mb-1">
-            Build Habits
-          </Text>
-          <Text className="text-4xl font-display text-white tracking-tight">
-            Routines
-          </Text>
+    <SafeAreaView edges={["top"]} style={S.root}>
+      <View style={S.header}>
+        <View style={S.headerText}>
+          <Text style={S.label}>Build Habits</Text>
+          <Text style={S.title}>Routines</Text>
+          {routines.length > 0 && (
+            <Text style={S.count}>
+              {done}/{routines.length} done today
+            </Text>
+          )}
         </View>
-
         <TouchableOpacity
           onPress={() => navigation.navigate("AddTodo", { type: "routine" })}
-          className="w-12 h-12 rounded-2xl items-center justify-center bg-primary"
-          style={{
-            shadowColor: "#c799ff", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.6, shadowRadius: 12, elevation: 8
-          }}
+          style={S.addBtn}
         >
-          <Ionicons name="add" size={28} color="#0b0e14" />
+          <Ionicons name="add" size={24} color="#0b0e14" />
         </TouchableOpacity>
       </View>
 
       <FlatList
         data={routines}
         keyExtractor={(item) => item._id}
-        renderItem={renderRoutineItem}
-        contentContainerStyle={{ padding: 16, paddingBottom: 100 }}
-        refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor="#00e3fd" />}
+        renderItem={renderItem}
+        contentContainerStyle={S.list}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefetching}
+            onRefresh={refetch}
+            tintColor="#c799ff"
+          />
+        }
+        ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
         ListEmptyComponent={() => (
-          <View className="items-center justify-center mt-20 opacity-50">
-            <Ionicons name="infinite" size={64} color="#45484f" />
-            <Text className="mt-4 text-center font-body text-text-muted-dark text-lg">
-              No routines yet.{"\n"}Initialize a new sequence.
-            </Text>
+          <View style={S.empty}>
+            <Ionicons name="infinite-outline" size={52} color="#2e3139" />
+            <Text style={S.emptyTitle}>No routines yet</Text>
+            <Text style={S.emptySub}>Tap + to create your first habit</Text>
           </View>
         )}
       />
     </SafeAreaView>
   );
 }
+
+const S = StyleSheet.create({
+  root: { flex: 1, backgroundColor: "#0b0e14" },
+  header: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 20,
+  },
+  headerText: {},
+  label: {
+    fontSize: 11,
+    color: "#c799ff",
+    fontFamily: "Inter_600SemiBold",
+    textTransform: "uppercase",
+    letterSpacing: 2,
+    marginBottom: 4,
+  },
+  title: {
+    fontSize: 30,
+    color: "#fff",
+    fontFamily: "Outfit_700Bold",
+    letterSpacing: -0.5,
+  },
+  count: {
+    fontSize: 12,
+    color: "#52555c",
+    fontFamily: "Inter_400Regular",
+    marginTop: 4,
+  },
+  addBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "#c799ff",
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 4,
+    shadowColor: "#c799ff",
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.45,
+    shadowRadius: 14,
+    elevation: 10,
+  },
+  list: { paddingHorizontal: 16, paddingBottom: 100 },
+  item: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 16,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.06)",
+    overflow: "hidden",
+    position: "relative",
+  },
+  checkbox: {
+    width: 24,
+    height: 24,
+    borderRadius: 8,
+    borderWidth: 1.5,
+    borderColor: "rgba(255,255,255,0.15)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  checkboxDone: { backgroundColor: "#00e3fd", borderColor: "#00e3fd" },
+  itemContent: { flex: 1, marginLeft: 14 },
+  itemTitle: { fontSize: 15, color: "#ecedf6", fontFamily: "Inter_500Medium" },
+  itemTitleDone: { color: "#45484f", textDecorationLine: "line-through" },
+  itemSub: {
+    fontSize: 12,
+    color: "#45484f",
+    fontFamily: "Inter_400Regular",
+    marginTop: 2,
+  },
+  repeatIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    backgroundColor: "rgba(199,153,255,0.1)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  empty: { alignItems: "center", paddingTop: 80 },
+  emptyTitle: {
+    fontSize: 16,
+    color: "#3a3d45",
+    fontFamily: "Outfit_700Bold",
+    marginTop: 16,
+  },
+  emptySub: {
+    fontSize: 13,
+    color: "#2e3139",
+    fontFamily: "Inter_400Regular",
+    marginTop: 6,
+  },
+});

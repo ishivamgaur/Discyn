@@ -62,8 +62,11 @@ const AnimatedIcon = ({ name, focused, color, animation }) => {
   }, [focused]);
 
   return (
-    <Animatable.View ref={ref} style={{ justifyContent: "center", alignItems: "center" }}>
-      <Ionicons name={name} size={28} color={color} />
+    <Animatable.View
+      ref={ref}
+      style={{ justifyContent: "center", alignItems: "center" }}
+    >
+      <Ionicons name={name} size={24} color={color} />
     </Animatable.View>
   );
 };
@@ -77,14 +80,14 @@ function AppTabs() {
           backgroundColor: "#0b0e14",
           borderTopColor: "rgba(255,255,255,0.1)",
           borderTopWidth: 1,
-          height: 64,
+          height: Platform.OS === "ios" ? 92 : 78,
           elevation: 0,
-          paddingBottom: 0,
+          paddingBottom: Platform.OS === "ios" ? 32 : 0,
         },
         tabBarItemStyle: {
           justifyContent: "center",
           alignItems: "center",
-          height: 64,
+          height: Platform.OS === "ios" ? 92 : 78,
         },
         tabBarIconStyle: {
           flex: 1,
@@ -93,7 +96,16 @@ function AppTabs() {
         },
         tabBarActiveTintColor: "#c799ff",
         tabBarInactiveTintColor: "#52555c",
-        tabBarShowLabel: false,
+        tabBarShowLabel: true,
+        tabBarLabelStyle: {
+          fontSize: 11,
+          fontFamily: "Inter_600SemiBold",
+          marginBottom: 10,
+          marginTop: 2,
+        },
+        tabBarIconStyle: {
+          marginTop: 10,
+        },
         tabBarIcon: ({ focused, color }) => {
           let iconName;
           let animation;
@@ -115,7 +127,14 @@ function AppTabs() {
             animation = "rotate";
           }
 
-          return <AnimatedIcon name={iconName} focused={focused} color={color} animation={animation} />;
+          return (
+            <AnimatedIcon
+              name={iconName}
+              focused={focused}
+              color={color}
+              animation={animation}
+            />
+          );
         },
       })}
     >
@@ -147,6 +166,19 @@ function AppContent() {
         });
       }
     })();
+
+    // Listen for notifications while app is open and show a toast
+    const subscription = Notifications.addNotificationReceivedListener(
+      (notification) => {
+        Toast.show({
+          type: "info",
+          text1: notification.request.content.title,
+          text2: notification.request.content.body,
+        });
+      },
+    );
+
+    return () => subscription.remove();
   }, []);
 
   useEffect(() => {
@@ -181,9 +213,12 @@ function AppContent() {
             dangerouslySetInnerHTML={{
               __html: `
             .glassmorphism {
-              background-color: rgba(11, 14, 20, 0.4) !important;
-              backdrop-filter: blur(24px) !important;
-              -webkit-backdrop-filter: blur(24px) !important;
+              background: rgba(11, 14, 20, 0.4) !important;
+              backdrop-filter: blur(24px) saturate(180%) contrast(120%) brightness(110%) !important;
+              -webkit-backdrop-filter: blur(24px) saturate(180%) contrast(120%) brightness(110%) !important;
+              border: 1px solid rgba(255, 255, 255, 0.1) !important;
+              box-shadow: 0 12px 24px rgba(0, 0, 0, 0.4) !important;
+              transform: translateZ(0) !important;
             }
           `,
             }}
@@ -267,37 +302,31 @@ const ToastBase = ({ text1, text2, accentColor, iconName }) => {
         elevation: 20,
       }}
     >
-      {isWeb ? (
-        createElement(
-          "div",
-          {
-            className: "liquid-glass",
-            style: {
-              display: "flex",
-              flexDirection: "row",
-              alignItems: "center",
-              padding: "16px",
-              position: "relative",
-              overflow: "hidden",
-            },
-          },
-          [
-            <div key="rim" className="specular-rim" />,
-            createElement(
-              View,
-              {
-                key: "content",
-                style: { flexDirection: "row", alignItems: "center", flex: 1 },
-              },
-              [<Content key="c" />],
-            ),
-          ],
-        )
+      {Platform.OS === "web" ? (
+        <div
+          style={{
+            width: "100%",
+            display: "flex",
+            flexDirection: "row",
+            alignItems: "center",
+            padding: "16px",
+            backgroundColor: "rgba(11, 14, 20, 0.4)",
+            backdropFilter:
+              "blur(24px) saturate(180%) contrast(120%) brightness(110%)",
+            WebkitBackdropFilter:
+              "blur(24px) saturate(180%) contrast(120%) brightness(110%)",
+            zIndex: 9999,
+            position: "relative",
+          }}
+        >
+          <div className="specular-rim" />
+          <Content />
+        </div>
       ) : (
         <BlurView
-          intensity={25}
+          intensity={70}
           tint="dark"
-          className="flex-row items-center p-4"
+          className="flex-row items-center p-4 w-full"
         >
           <Content />
         </BlurView>

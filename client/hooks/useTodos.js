@@ -3,7 +3,12 @@
  * Server-state management for todos.
  * Uses todoApi service for data fetching — never calls axios directly.
  */
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import {
+  useQuery,
+  useMutation,
+  useQueryClient,
+  keepPreviousData,
+} from "@tanstack/react-query";
 import * as todoApi from "../services/todoApi";
 import haptics from "../services/hapticsService";
 
@@ -88,11 +93,12 @@ export const useDeleteTodo = () => {
   });
 };
 
-export const useStats = (range) => {
+export const useStats = (range, year) => {
   return useQuery({
-    queryKey: ["stats", range],
-    queryFn: () => todoApi.fetchStats(range),
+    queryKey: ["stats", range, year],
+    queryFn: () => todoApi.fetchStats(range, year),
     staleTime: 1000 * 60 * 5,
+    placeholderData: keepPreviousData,
   });
 };
 
