@@ -2,6 +2,29 @@ import asyncHandler from "../middleware/asyncHandler.js";
 import Todo from "../models/Todo.js";
 import sendEmail from "../utils/sendEmail.js";
 
+const getTimezoneOffsetMinutes = (value) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+};
+
+const getMongoTimezoneOffset = (offsetMinutes) => {
+  const localMinutes = -offsetMinutes;
+  const sign = localMinutes >= 0 ? "+" : "-";
+  const absoluteMinutes = Math.abs(localMinutes);
+  const hours = String(Math.floor(absoluteMinutes / 60)).padStart(2, "0");
+  const minutes = String(absoluteMinutes % 60).padStart(2, "0");
+  return `${sign}${hours}:${minutes}`;
+};
+
+const shiftToUserLocal = (date, offsetMinutes) =>
+  new Date(date.getTime() - offsetMinutes * 60000);
+
+const shiftFromUserLocal = (date, offsetMinutes) =>
+  new Date(date.getTime() + offsetMinutes * 60000);
+
+const getUserDateKey = (date, offsetMinutes) =>
+  shiftToUserLocal(date, offsetMinutes).toISOString().slice(0, 10);
+
 // @desc    Get all todos for logged in user
 // @route   GET /todos
 // @access  Private
@@ -154,29 +177,35 @@ export const deleteTodo = asyncHandler(async (req, res) => {
 // @route   GET /api/todos/stats
 // @access  Private
 export const getStats = asyncHandler(async (req, res) => {
-  const { range, year, timezoneOffset = 0 } = req.query; // timezoneOffset in minutes
+  const { range, year, timezoneOffset = 0 } = req.query;
   const userId = req.user._id;
   const now = new Date();
+  const timezoneOffsetMinutes = getTimezoneOffsetMinutes(timezoneOffset);
+  const mongoTimezone = getMongoTimezoneOffset(timezoneOffsetMinutes);
+  const userNow = shiftToUserLocal(now, timezoneOffsetMinutes);
+  const todayLocal = new Date(userNow);
+  todayLocal.setHours(0, 0, 0, 0);
+  const todayEndLocal = new Date(userNow);
+  todayEndLocal.setHours(23, 59, 59, 999);
 
-  // 1. Determine Date Range & Format for Graphs
-  let startDate = new Date();
-  let endDate = new Date();
+  let startLocal = new Date(todayLocal);
+  let endLocal = new Date(todayEndLocal);
   let groupByFormat = "%Y-%m-%d";
 
   if (range === "weekly") {
-    startDate.setDate(now.getDate() - 6);
-    startDate.setHours(0, 0, 0, 0);
+    startLocal.setDate(startLocal.getDate() - 6);
   } else if (range === "monthly") {
-    startDate.setDate(1);
-    startDate.setHours(0, 0, 0, 0);
+    startLocal.setDate(1);
   } else if (range === "yearly") {
-    const selectedYear = parseInt(year) || now.getFullYear();
-    startDate = new Date(selectedYear, 0, 1, 0, 0, 0, 0);
-    endDate = new Date(selectedYear, 11, 31, 23, 59, 59, 999);
+    const selectedYear = parseInt(year, 10) || userNow.getFullYear();
+    startLocal = new Date(selectedYear, 0, 1, 0, 0, 0, 0);
+    endLocal = new Date(selectedYear, 11, 31, 23, 59, 59, 999);
     groupByFormat = "%Y-%m-%d";
   }
 
-  // 2. Main Stats Aggregation (for the specific range graph)
+  const startDate = shiftFromUserLocal(startLocal, timezoneOffsetMinutes);
+  const endDate = shiftFromUserLocal(endLocal, timezoneOffsetMinutes);
+
   const rangePipeline = [
     { $match: { user: userId } },
     {
@@ -205,7 +234,11 @@ export const getStats = asyncHandler(async (req, res) => {
     {
       $group: {
         _id: {
-          $dateToString: { format: groupByFormat, date: "$allCompletions" },
+          $dateToString: {
+            format: groupByFormat,
+            date: "$allCompletions",
+            timezone: mongoTimezone,
+          },
         },
         count: { $sum: 1 },
       },
@@ -215,7 +248,6 @@ export const getStats = asyncHandler(async (req, res) => {
 
   const chartStats = await Todo.aggregate(rangePipeline);
 
-  // 3. Streak Calculation (Requires ALL time history, strictly Daily)
   const streakPipeline = [
     { $match: { user: userId } },
     {
@@ -240,51 +272,45 @@ export const getStats = asyncHandler(async (req, res) => {
       },
     },
     { $unwind: "$allCompletions" },
-    // We only care about unique dates for streak
     {
       $group: {
-        _id: { $dateToString: { format: "%Y-%m-%d", date: "$allCompletions" } },
+        _id: {
+          $dateToString: {
+            format: "%Y-%m-%d",
+            date: "$allCompletions",
+            timezone: mongoTimezone,
+          },
+        },
       },
     },
-    { $sort: { _id: -1 } }, // Descending (Today -> Past)
+    { $sort: { _id: -1 } },
   ];
 
   const streakData = await Todo.aggregate(streakPipeline);
-  const uniqueDates = streakData.map((d) => d._id); // ["2024-02-14", "2024-02-13", ...]
+  const uniqueDates = streakData.map((d) => d._id);
 
-  // Streak Logic
   let streak = 0;
-  const todayStr = now.toISOString().slice(0, 10);
+  const todayStr = getUserDateKey(now, timezoneOffsetMinutes);
   const yesterday = new Date(now);
   yesterday.setDate(now.getDate() - 1);
-  const yesterdayStr = yesterday.toISOString().slice(0, 10);
+  const yesterdayStr = getUserDateKey(yesterday, timezoneOffsetMinutes);
 
-  // If user hasn't done anything today OR yesterday, streak is 0.
-  // Exception: If they did it today, streak starts. If they missed today provided it's late?
-  // Standard logic: specific check.
   if (uniqueDates.length > 0) {
     if (uniqueDates[0] === todayStr || uniqueDates[0] === yesterdayStr) {
-      // Streak is active
-      let currentTestDate = new Date(uniqueDates[0]); // Start with the latest valid completion
+      let currentTestDate = new Date(uniqueDates[0]);
 
       for (let i = 0; i < uniqueDates.length; i++) {
         const dateStr = uniqueDates[i];
-        // Compare dateStr with currentTestDate string
         if (dateStr === currentTestDate.toISOString().slice(0, 10)) {
           streak++;
-          currentTestDate.setDate(currentTestDate.getDate() - 1); // Go back one day
+          currentTestDate.setDate(currentTestDate.getDate() - 1);
         } else {
-          // Gap detected
           break;
         }
       }
     }
   }
 
-  // 4. completionRate & Total
-  // Using simplified counts for speed
-  const totalTasksCreated = await Todo.countDocuments({ user: userId });
-  // Total completions and focus time (all time events)
   const totalAgg = await Todo.aggregate([
     { $match: { user: userId } },
     {
@@ -314,13 +340,10 @@ export const getStats = asyncHandler(async (req, res) => {
     { $group: { _id: null, total: { $sum: "$totalCount" }, totalTimeSpent: { $sum: "$timeSpent" } } },
   ]);
   const totalCompleted = totalAgg[0]?.total || 0;
-  const totalFocusTime = totalAgg[0]?.totalTimeSpent || 0; // In seconds
+  const totalFocusTime = totalAgg[0]?.totalTimeSpent || 0;
 
-  // Daily completion rate: today's completed / today's total tasks
-  const todayStart = new Date();
-  todayStart.setHours(0, 0, 0, 0);
-  const todayEnd = new Date();
-  todayEnd.setHours(23, 59, 59, 999);
+  const todayStart = shiftFromUserLocal(todayLocal, timezoneOffsetMinutes);
+  const todayEnd = shiftFromUserLocal(todayEndLocal, timezoneOffsetMinutes);
 
   const todayTotal = await Todo.countDocuments({
     user: userId,
@@ -342,33 +365,31 @@ export const getStats = asyncHandler(async (req, res) => {
 
   const completionRate = todayTotal > 0 ? todayCompleted / todayTotal : 0;
 
-  // 5. Format Data for Frontend
   let finalLabels = [];
   let finalData = [];
 
   if (range === "yearly") {
-    // Heatmap format: Array of { date: "YYYY-MM-DD", count: 1 }
-    // The frontend contribution graph handles specific days.
-    // We pass the raw daily data we got in `chartStats` (which is already grouped by day for Yearly query)
     finalData = chartStats.map((item) => ({
       date: item._id,
       count: item.count,
     }));
-    // Labels aren't used for Heatmap the same way
   } else {
-    // Bar/Line format logic (Filling gaps)
-    const end = new Date();
+    const end = new Date(endDate);
     let current = new Date(startDate);
 
     while (current <= end) {
-      const key = current.toISOString().slice(0, 10);
+      const key = getUserDateKey(current, timezoneOffsetMinutes);
       const found = chartStats.find((s) => s._id === key);
+      const displayDate = shiftToUserLocal(current, timezoneOffsetMinutes);
 
       let label;
       if (range === "weekly") {
-        label = current.toLocaleDateString("default", { weekday: "short" });
+        label = displayDate.toLocaleDateString("default", {
+          weekday: "short",
+          timeZone: "UTC",
+        });
       } else {
-        label = current.getDate().toString();
+        label = displayDate.getUTCDate().toString();
       }
 
       finalLabels.push(label);
@@ -445,7 +466,26 @@ export const getHistory = asyncHandler(async (req, res) => {
         },
       },
     ],
-  }).select("title description isRecurring completedAt");
+  }).select("title description isRecurring completedAt completionHistory");
 
-  res.json(tasks);
+  const formattedTasks = tasks.map((task) => {
+    let completedAt = task.completedAt;
+
+    if (task.isRecurring) {
+      completedAt =
+        task.completionHistory.find(
+          (entry) => entry >= startOfDay && entry <= endOfDay,
+        ) || null;
+    }
+
+    return {
+      _id: task._id,
+      title: task.title,
+      description: task.description,
+      isRecurring: task.isRecurring,
+      completedAt,
+    };
+  });
+
+  res.json(formattedTasks);
 });

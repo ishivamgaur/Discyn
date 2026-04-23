@@ -1,0 +1,16 @@
+Starting project at C:\Users\1by20\Desktop\Discyn\client
+Metro is running in CI mode, reloads are disabled. Remove CI=true to enable watch mode.
+Starting Metro Bundler
+warning: Bundler cache is empty, rebuilding (this may take a minute)
+Tunnel connected.
+Tunnel ready.
+Waiting on http://localhost:8081
+Logs for your project will appear below.
+Android .\index.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Android .\index.js ▓▓░░░░░░░░░░░░░░ 15.3% (110/281)
+Android .\index.js ▓▓▓▓▓▓▓▓▓░░░░░░░ 58.7% ( 908/1248)
+Android .\index.js ▓▓▓▓▓▓▓▓▓▓▓░░░░░ 73.5% (1592/1857)
+Android .\index.js ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░ 99.9% (2349/2350)
+Android Bundled 15936ms index.js (2350 modules)
+Android .\index.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Android Bundled 203ms index.js (1 module)
