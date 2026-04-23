@@ -11,6 +11,10 @@ import {
 } from "@tanstack/react-query";
 import * as todoApi from "../services/todoApi";
 import haptics from "../services/hapticsService";
+import {
+  cancelReminders,
+  handleTaskScheduling,
+} from "../services/notificationService";
 
 export const useTodos = () => {
   return useQuery({
@@ -54,6 +58,17 @@ export const useToggleComplete = () => {
       queryClient.setQueryData(["todos"], context.previousTodos);
       haptics.error();
     },
+    onSuccess: async (updatedTodo) => {
+      try {
+        if (updatedTodo.isCompleted) {
+          await cancelReminders(updatedTodo._id);
+        } else {
+          await handleTaskScheduling(updatedTodo);
+        }
+      } catch (error) {
+        console.log("Notification sync failed:", error.message);
+      }
+    },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ["todos"] });
     },
@@ -65,7 +80,13 @@ export const useAddTodo = () => {
 
   return useMutation({
     mutationFn: todoApi.createTodo,
-    onSuccess: () => {
+    onSuccess: async (createdTodo) => {
+      try {
+        await handleTaskScheduling(createdTodo);
+      } catch (error) {
+        console.log("Notification sync failed:", error.message);
+      }
+
       queryClient.invalidateQueries({ queryKey: ["todos"] });
     },
   });
@@ -76,7 +97,17 @@ export const useUpdateTodo = () => {
 
   return useMutation({
     mutationFn: ({ id, payload }) => todoApi.updateTodo(id, payload),
-    onSuccess: () => {
+    onSuccess: async (updatedTodo) => {
+      try {
+        if (updatedTodo.isCompleted) {
+          await cancelReminders(updatedTodo._id);
+        } else {
+          await handleTaskScheduling(updatedTodo);
+        }
+      } catch (error) {
+        console.log("Notification sync failed:", error.message);
+      }
+
       queryClient.invalidateQueries({ queryKey: ["todos"] });
     },
   });
@@ -87,7 +118,13 @@ export const useDeleteTodo = () => {
 
   return useMutation({
     mutationFn: todoApi.deleteTodo,
-    onSuccess: () => {
+    onSuccess: async (_, deletedTodoId) => {
+      try {
+        await cancelReminders(deletedTodoId);
+      } catch (error) {
+        console.log("Notification cleanup failed:", error.message);
+      }
+
       queryClient.invalidateQueries({ queryKey: ["todos"] });
     },
   });

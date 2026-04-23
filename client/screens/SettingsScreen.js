@@ -1,38 +1,130 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import {
   View,
   Text,
   TouchableOpacity,
   ScrollView,
   StyleSheet,
+  Linking,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Toast from "react-native-toast-message";
 import { useAuthStore } from "../store/useAuthStore";
 import GlassBackground from "../components/GlassBackground";
+import {
+  ensurePermissions,
+  getNotificationPermissionStatus,
+  scheduleTestNotification,
+} from "../services/notificationService";
 
 export default function SettingsScreen() {
   const logout = useAuthStore((s) => s.logout);
+  const [notificationStatus, setNotificationStatus] = useState("unknown");
+
+  const refreshNotificationStatus = async () => {
+    try {
+      const status = await getNotificationPermissionStatus();
+      setNotificationStatus(status);
+    } catch {
+      setNotificationStatus("unknown");
+    }
+  };
+
+  useEffect(() => {
+    refreshNotificationStatus();
+  }, []);
+
   const handleLogout = async () => {
     try {
       await logout();
     } catch {
-      Toast.show({ type: "error", text1: "Logout failed" });
+      Toast.show({
+        type: "error",
+        text1: "Logout failed",
+        text2: "Your session could not be closed right now.",
+      });
     }
   };
+
+  const handleEnableNotifications = async () => {
+    try {
+      const granted = await ensurePermissions();
+      await refreshNotificationStatus();
+
+      if (granted) {
+        Toast.show({
+          type: "success",
+          text1: "Notifications enabled",
+          text2: "Discyn can now notify you in the panel.",
+        });
+        return;
+      }
+
+      Toast.show({
+        type: "error",
+        text1: "Permission not granted",
+        text2: "Enable notifications in device settings.",
+      });
+      Linking.openSettings?.();
+    } catch {
+      Toast.show({
+        type: "error",
+        text1: "Notifications unavailable",
+      });
+    }
+  };
+
+  const handleTestNotification = async () => {
+    try {
+      const scheduled = await scheduleTestNotification();
+      await refreshNotificationStatus();
+
+      if (!scheduled) {
+        Toast.show({
+          type: "error",
+          text1: "Permission required",
+          text2: "Allow notifications first.",
+        });
+        return;
+      }
+    } catch {
+      Toast.show({
+        type: "error",
+        text1: "Test notification failed",
+      });
+    }
+  };
+
+  const notificationSubtitle =
+    notificationStatus === "granted"
+      ? "Allowed on this device"
+      : notificationStatus === "denied"
+        ? "Blocked - tap to enable"
+        : "Manage alerts and reminders";
 
   const GROUPS = [
     {
       label: "Preferences",
       items: [
         {
+          key: "notifications",
           icon: "notifications-outline",
           color: "#00e3fd",
           title: "Notifications",
-          subtitle: "Manage alerts and reminders",
+          subtitle: notificationSubtitle,
+          onPress: handleEnableNotifications,
         },
         {
+          key: "notification-test",
+          icon: "paper-plane-outline",
+          color: "#c799ff",
+          title: "Send Test Notification",
+          subtitle: "Verify panel delivery in 3 seconds",
+          onPress: handleTestNotification,
+        },
+        {
+          key: "privacy",
           icon: "shield-checkmark-outline",
           color: "#10b981",
           title: "Privacy & Data",
@@ -44,12 +136,14 @@ export default function SettingsScreen() {
       label: "Account",
       items: [
         {
+          key: "profile",
           icon: "person-outline",
           color: "#c799ff",
           title: "Profile",
           subtitle: "Manage your identity",
         },
         {
+          key: "sync",
           icon: "cloud-outline",
           color: "#3b82f6",
           title: "Sync",
@@ -76,8 +170,12 @@ export default function SettingsScreen() {
             <View style={S.card}>
               <GlassBackground />
               {g.items.map((item, i) => (
-                <View key={item.title}>
-                  <TouchableOpacity activeOpacity={0.7} style={S.row}>
+                <View key={item.key}>
+                  <TouchableOpacity
+                    activeOpacity={0.7}
+                    onPress={item.onPress}
+                    style={S.row}
+                  >
                     <View
                       style={[
                         S.iconBox,

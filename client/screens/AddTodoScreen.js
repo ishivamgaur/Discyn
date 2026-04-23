@@ -14,7 +14,6 @@ import { Ionicons } from "@expo/vector-icons";
 import Slider from "@react-native-community/slider";
 import haptics from "../services/hapticsService";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { handleTaskScheduling } from "../services/notificationService";
 import { useAddTodo } from "../hooks/useTodos";
 import GlassBackground from "../components/GlassBackground";
 
@@ -64,13 +63,7 @@ export default function AddTodoScreen({ navigation, route }) {
         type: isRecurring ? "ROUTINE" : "TASK",
       };
 
-      const todo = await addTodoMutation.mutateAsync(payload);
-
-      try {
-        await handleTaskScheduling(todo);
-      } catch (e) {
-        console.error("Scheduling failed:", e);
-      }
+      await addTodoMutation.mutateAsync(payload);
 
       haptics.success();
       navigation.goBack();

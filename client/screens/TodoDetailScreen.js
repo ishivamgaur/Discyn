@@ -10,13 +10,14 @@ import {
   Animated,
   Easing,
   StyleSheet,
+  ActivityIndicator,
 } from "react-native";
 import Svg, { Circle, Defs, LinearGradient, Stop } from "react-native-svg";
 import haptics from "../services/hapticsService";
 import { Ionicons } from "@expo/vector-icons";
 import Toast from "react-native-toast-message";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useUpdateTodo, useDeleteTodo } from "../hooks/useTodos";
+import { useUpdateTodo, useDeleteTodo, useTodos } from "../hooks/useTodos";
 import GlassBackground from "../components/GlassBackground";
 
 const FOCUS_PRESETS = [
@@ -28,18 +29,21 @@ const FOCUS_PRESETS = [
 
 const PRIORITY_OPTIONS = [
   {
+    value: "LOW",
     label: "Low",
     color: "#10b981",
     bg: "rgba(16,185,129,0.12)",
     icon: "arrow-down-outline",
   },
   {
+    value: "MEDIUM",
     label: "Medium",
     color: "#f59e0b",
     bg: "rgba(245,158,11,0.12)",
     icon: "remove-outline",
   },
   {
+    value: "HIGH",
     label: "High",
     color: "#ff6e84",
     bg: "rgba(255,110,132,0.12)",
@@ -48,20 +52,23 @@ const PRIORITY_OPTIONS = [
 ];
 
 export default function TodoDetailScreen({ route, navigation }) {
-  const { todo } = route.params;
+  const routeTodo = route.params?.todo;
+  const todoId = route.params?.todoId || routeTodo?._id;
+  const { data: todos = [], isLoading: isTodosLoading } = useTodos();
+  const todo = todos.find((item) => item._id === todoId) || routeTodo;
   const updateMutation = useUpdateTodo();
   const deleteMutation = useDeleteTodo();
 
-  const [title, setTitle] = useState(todo.title);
-  const [description, setDescription] = useState(todo.description || "");
-  const [isCompleted, setIsCompleted] = useState(todo.isCompleted);
-  const [priority, setPriority] = useState(todo.priority || "Medium");
+  const [title, setTitle] = useState(routeTodo?.title || "");
+  const [description, setDescription] = useState(routeTodo?.description || "");
+  const [isCompleted, setIsCompleted] = useState(routeTodo?.isCompleted || false);
+  const [priority, setPriority] = useState(routeTodo?.priority || "MEDIUM");
 
   // Timer
   const [focusMode, setFocusMode] = useState("stopwatch");
   const [isRunning, setIsRunning] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
-  const [timeSpent, setTimeSpent] = useState(todo.timeSpent || 0);
+  const [timeSpent, setTimeSpent] = useState(routeTodo?.timeSpent || 0);
   const [countdownTotal, setCountdownTotal] = useState(25 * 60);
   const [countdownLeft, setCountdownLeft] = useState(25 * 60);
   const [sessions, setSessions] = useState(0);
@@ -70,11 +77,23 @@ export default function TodoDetailScreen({ route, navigation }) {
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const glowOpacity = useRef(new Animated.Value(0)).current;
   const progressAnim = useRef(new Animated.Value(0)).current;
+  const initializedTodoIdRef = useRef(null);
 
   const RING = 180;
   const STROKE = 8;
   const R = (RING - STROKE * 2) / 2;
   const CIRCUMFERENCE = 2 * Math.PI * R;
+
+  useEffect(() => {
+    if (!todo || initializedTodoIdRef.current === todo._id) return;
+
+    setTitle(todo.title);
+    setDescription(todo.description || "");
+    setIsCompleted(todo.isCompleted);
+    setPriority(todo.priority || "MEDIUM");
+    setTimeSpent(todo.timeSpent || 0);
+    initializedTodoIdRef.current = todo._id;
+  }, [todo]);
 
   useEffect(() => {
     if (isRunning) {
@@ -202,7 +221,11 @@ export default function TodoDetailScreen({ route, navigation }) {
   const handleSave = async () => {
     if (!title.trim()) {
       haptics.error();
-      Toast.show({ type: "error", text1: "Title required" });
+      Toast.show({
+        type: "error",
+        text1: "Title required",
+        text2: "Add a task title before saving your changes.",
+      });
       return;
     }
     try {
@@ -214,7 +237,11 @@ export default function TodoDetailScreen({ route, navigation }) {
       navigation.goBack();
     } catch {
       haptics.error();
-      Toast.show({ type: "error", text1: "Failed to save" });
+      Toast.show({
+        type: "error",
+        text1: "Failed to save",
+        text2: "Your latest edits could not be saved right now.",
+      });
     }
   };
 
@@ -223,11 +250,19 @@ export default function TodoDetailScreen({ route, navigation }) {
     try {
       await deleteMutation.mutateAsync(todo._id);
       haptics.success();
-      Toast.show({ type: "success", text1: "Task deleted" });
+      Toast.show({
+        type: "success",
+        text1: "Task deleted",
+        text2: "This task and its reminders were removed.",
+      });
       navigation.goBack();
     } catch {
       haptics.error();
-      Toast.show({ type: "error", text1: "Failed to delete" });
+      Toast.show({
+        type: "error",
+        text1: "Failed to delete",
+        text2: "Discyn could not remove this task right now.",
+      });
     }
   };
 
@@ -237,6 +272,33 @@ export default function TodoDetailScreen({ route, navigation }) {
       ? 1 - countdownLeft / countdownTotal
       : 0;
   const strokeDashoffset = CIRCUMFERENCE * (1 - ringProgress);
+
+  if (!todo && isTodosLoading) {
+    return (
+      <SafeAreaView edges={["top"]} style={styles.root}>
+        <View style={styles.centerState}>
+          <ActivityIndicator size="large" color="#c799ff" />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (!todo) {
+    return (
+      <SafeAreaView edges={["top"]} style={styles.root}>
+        <View style={styles.centerState}>
+          <Ionicons name="alert-circle-outline" size={42} color="#45484f" />
+          <Text style={styles.centerTitle}>Task not found</Text>
+          <TouchableOpacity
+            onPress={() => navigation.goBack()}
+            style={styles.centerAction}
+          >
+            <Text style={styles.centerActionText}>Back</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView edges={["top"]} style={styles.root}>
@@ -324,13 +386,13 @@ export default function TodoDetailScreen({ route, navigation }) {
             <Text style={styles.cardLabel}>Priority</Text>
             <View style={styles.priorityRow}>
               {PRIORITY_OPTIONS.map((opt) => {
-                const active = priority === opt.label;
+                const active = priority === opt.value;
                 return (
                   <TouchableOpacity
                     key={opt.label}
                     onPress={() => {
                       haptics.light();
-                      setPriority(opt.label);
+                      setPriority(opt.value);
                     }}
                     style={[
                       styles.priorityBtn,
@@ -621,6 +683,34 @@ export default function TodoDetailScreen({ route, navigation }) {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: "#0b0e14" },
+  centerState: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 24,
+  },
+  centerTitle: {
+    marginTop: 14,
+    fontSize: 18,
+    color: "#fff",
+    fontFamily: "Outfit_700Bold",
+  },
+  centerAction: {
+    marginTop: 18,
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    borderRadius: 16,
+    backgroundColor: "rgba(199,153,255,0.14)",
+    borderWidth: 1,
+    borderColor: "rgba(199,153,255,0.2)",
+  },
+  centerActionText: {
+    fontSize: 12,
+    color: "#c799ff",
+    fontFamily: "Inter_600SemiBold",
+    textTransform: "uppercase",
+    letterSpacing: 1.2,
+  },
 
   // Nav
   navBar: {

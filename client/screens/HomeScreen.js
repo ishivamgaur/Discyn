@@ -152,7 +152,7 @@ export default function HomeScreen({ navigation }) {
         {/* Header */}
         <View style={styles.header}>
           <Text style={styles.greeting}>{greeting}</Text>
-          <Text style={styles.headline}>Hello, Shivam 👋</Text>
+          <Text style={styles.headline}>{`Hello, ${userName} \u{1F44B}`}</Text>
         </View>
 
         {/* Routine Progress Card */}
