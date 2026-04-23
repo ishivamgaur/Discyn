@@ -10,7 +10,11 @@ import {
   Inter_500Medium,
   Inter_600SemiBold,
 } from "@expo-google-fonts/inter";
-import { NavigationContainer, DarkTheme } from "@react-navigation/native";
+import {
+  NavigationContainer,
+  DarkTheme,
+  createNavigationContainerRef,
+} from "@react-navigation/native";
 import { createStackNavigator } from "@react-navigation/stack";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import * as Notifications from "expo-notifications";
@@ -25,6 +29,7 @@ import {
 import Toast from "react-native-toast-message";
 import { Ionicons } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
+import { LinearGradient } from "expo-linear-gradient";
 import { useAuthStore } from "./store/useAuthStore";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
@@ -41,6 +46,7 @@ import RoutinesScreen from "./screens/RoutinesScreen";
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
 const queryClient = new QueryClient();
+const navigationRef = createNavigationContainerRef();
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -151,6 +157,31 @@ function AppContent() {
   const isLoggedIn = useAuthStore((s) => s.isLoggedIn);
   const loadSession = useAuthStore((s) => s.loadSession);
   const [isLoading, setIsLoading] = useState(true);
+  const pendingTodoIdRef = React.useRef(null);
+
+  const openTodoFromNotification = React.useCallback(
+    (todoId) => {
+      if (!todoId) return;
+
+      if (navigationRef.isReady() && isLoggedIn) {
+        navigationRef.navigate("TodoDetail", { todoId });
+        return;
+      }
+
+      pendingTodoIdRef.current = todoId;
+    },
+    [isLoggedIn],
+  );
+
+  const flushPendingTodoNavigation = React.useCallback(() => {
+    if (!pendingTodoIdRef.current) return;
+    if (!navigationRef.isReady() || !isLoggedIn) return;
+
+    navigationRef.navigate("TodoDetail", {
+      todoId: pendingTodoIdRef.current,
+    });
+    pendingTodoIdRef.current = null;
+  }, [isLoggedIn]);
 
   useEffect(() => {
     (async () => {
@@ -166,8 +197,9 @@ function AppContent() {
         });
       }
     })();
+  }, [loadSession]);
 
-    // Listen for notifications while app is open and show a toast
+  useEffect(() => {
     const subscription = Notifications.addNotificationReceivedListener(
       (notification) => {
         Toast.show({
@@ -177,13 +209,28 @@ function AppContent() {
         });
       },
     );
+    const responseSubscription =
+      Notifications.addNotificationResponseReceivedListener((response) => {
+        openTodoFromNotification(response.notification.request.content.data?.todoId);
+      });
 
-    return () => subscription.remove();
-  }, []);
+    Notifications.getLastNotificationResponseAsync().then((response) => {
+      openTodoFromNotification(response?.notification?.request?.content?.data?.todoId);
+    });
+
+    return () => {
+      subscription.remove();
+      responseSubscription.remove();
+    };
+  }, [openTodoFromNotification]);
 
   useEffect(() => {
     SystemUI.setBackgroundColorAsync("#0b0e14");
   }, []);
+
+  useEffect(() => {
+    flushPendingTodoNavigation();
+  }, [flushPendingTodoNavigation]);
 
   const navigationTheme = {
     ...DarkTheme,
@@ -206,7 +253,11 @@ function AppContent() {
 
   return (
     <View style={{ flex: 1, backgroundColor: "#0b0e14" }}>
-      <NavigationContainer theme={navigationTheme}>
+      <NavigationContainer
+        ref={navigationRef}
+        theme={navigationTheme}
+        onReady={flushPendingTodoNavigation}
+      >
         <StatusBar barStyle="light-content" backgroundColor="#0b0e14" />
         {Platform.OS === "web" && (
           <style
@@ -264,16 +315,20 @@ function AppContent() {
 
 import { createElement } from "react";
 
-const ToastBase = ({ text1, text2, accentColor, iconName }) => {
-  const isWeb = Platform.OS === "web";
-
+const ToastBase = ({
+  text1,
+  text2,
+  accentColor,
+  iconName,
+  blurTarget,
+}) => {
   const Content = () => (
     <>
       <View
         className="w-11 h-11 rounded-full items-center justify-center mr-3.5 border"
         style={{
-          backgroundColor: accentColor + "15",
-          borderColor: accentColor + "30",
+          backgroundColor: accentColor + "16",
+          borderColor: accentColor + "38",
         }}
       >
         <Ionicons name={iconName} size={22} color={accentColor} />
@@ -283,7 +338,7 @@ const ToastBase = ({ text1, text2, accentColor, iconName }) => {
           {text1}
         </Text>
         {text2 && (
-          <Text className="text-text-muted-dark font-body text-[13px] mt-0.5">
+          <Text className="text-text-muted-dark font-body text-[13px] mt-1">
             {text2}
           </Text>
         )}
@@ -293,8 +348,11 @@ const ToastBase = ({ text1, text2, accentColor, iconName }) => {
 
   return (
     <View
-      className="w-[92%] max-w-[420px] mt-4 rounded-[24px] overflow-hidden border border-white/10 shadow-2xl"
+      className="w-[92%] max-w-[420px] rounded-[24px] overflow-hidden shadow-2xl"
       style={{
+        minHeight: 84,
+        borderWidth: 1,
+        borderColor: accentColor + "22",
         shadowColor: "#000",
         shadowOffset: { width: 0, height: 12 },
         shadowOpacity: 0.4,
@@ -306,11 +364,13 @@ const ToastBase = ({ text1, text2, accentColor, iconName }) => {
         <div
           style={{
             width: "100%",
+            minHeight: "84px",
             display: "flex",
             flexDirection: "row",
             alignItems: "center",
             padding: "16px",
-            backgroundColor: "rgba(11, 14, 20, 0.4)",
+            background:
+              "linear-gradient(180deg, rgba(22, 27, 36, 0.88) 0%, rgba(11, 14, 20, 0.76) 100%)",
             backdropFilter:
               "blur(24px) saturate(180%) contrast(120%) brightness(110%)",
             WebkitBackdropFilter:
@@ -319,32 +379,65 @@ const ToastBase = ({ text1, text2, accentColor, iconName }) => {
             position: "relative",
           }}
         >
+          <div
+            style={{
+              position: "absolute",
+              inset: "0",
+              background:
+                "linear-gradient(135deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.01) 45%, rgba(255,255,255,0) 100%)",
+              pointerEvents: "none",
+            }}
+          />
           <div className="specular-rim" />
           <Content />
         </div>
       ) : (
-        <BlurView
-          intensity={70}
-          tint="dark"
-          className="flex-row items-center p-4 w-full"
-        >
-          <Content />
-        </BlurView>
+        <View style={{ backgroundColor: "transparent" }}>
+          <BlurView
+            intensity={Platform.OS === "android" ? 100 : 82}
+            tint="dark"
+            className="flex-row items-center p-4 w-full overflow-hidden"
+            style={{ minHeight: 84 }}
+            blurTarget={Platform.OS === "android" ? blurTarget : undefined}
+            blurMethod={
+              Platform.OS === "android" ? "dimezisBlurView" : undefined
+            }
+            blurReductionFactor={Platform.OS === "android" ? 1 : undefined}
+          >
+            <LinearGradient
+              pointerEvents="none"
+              colors={[
+                "rgba(255,255,255,0.08)",
+                "rgba(255,255,255,0.025)",
+                "rgba(255,255,255,0.01)",
+              ]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={{
+                position: "absolute",
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+              }}
+            />
+            <View
+              pointerEvents="none"
+              style={{
+                position: "absolute",
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                backgroundColor: "rgba(255,255,255,0.015)",
+              }}
+            />
+            <Content />
+          </BlurView>
+        </View>
       )}
     </View>
   );
-};
-
-const toastConfig = {
-  success: (props) => (
-    <ToastBase {...props} accentColor="#c799ff" iconName="checkmark-circle" />
-  ),
-  error: (props) => (
-    <ToastBase {...props} accentColor="#ff6e84" iconName="alert-circle" />
-  ),
-  info: (props) => (
-    <ToastBase {...props} accentColor="#00e3fd" iconName="information-circle" />
-  ),
 };
 
 export default function App() {
@@ -355,12 +448,42 @@ export default function App() {
     Inter_500Medium,
     Inter_600SemiBold,
   });
+  const blurTargetRef = React.useRef(null);
   if (!fontsLoaded) return null;
+
+  const toastConfig = {
+    success: (props) => (
+      <ToastBase
+        {...props}
+        blurTarget={blurTargetRef}
+        accentColor="#10b981"
+        iconName="checkmark-circle"
+      />
+    ),
+    error: (props) => (
+      <ToastBase
+        {...props}
+        blurTarget={blurTargetRef}
+        accentColor="#ff6e84"
+        iconName="alert-circle"
+      />
+    ),
+    info: (props) => (
+      <ToastBase
+        {...props}
+        blurTarget={blurTargetRef}
+        accentColor="#00e3fd"
+        iconName="information-circle"
+      />
+    ),
+  };
 
   return (
     <QueryClientProvider client={queryClient}>
-      <AppContent />
-      <Toast config={toastConfig} />
+      <View ref={blurTargetRef} style={{ flex: 1 }} collapsable={false}>
+        <AppContent />
+      </View>
+      <Toast config={toastConfig} topOffset={18} />
     </QueryClientProvider>
   );
 }

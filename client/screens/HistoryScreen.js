@@ -34,10 +34,12 @@ export default function HistoryScreen() {
         )}
       </View>
       <Text style={S.itemTime}>
-        {new Date(item.completedAt || new Date()).toLocaleTimeString([], {
-          hour: "2-digit",
-          minute: "2-digit",
-        })}
+        {item.completedAt
+          ? new Date(item.completedAt).toLocaleTimeString([], {
+              hour: "2-digit",
+              minute: "2-digit",
+            })
+          : "--:--"}
       </Text>
     </View>
   );

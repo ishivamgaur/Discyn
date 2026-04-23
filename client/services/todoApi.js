@@ -25,8 +25,9 @@ export const deleteTodo = async (id) => {
 };
 
 export const fetchStats = async (range, year) => {
+  const timezoneOffset = new Date().getTimezoneOffset();
   const { data } = await api.get(
-    `/todos/stats?range=${range}${year ? `&year=${year}` : ""}`,
+    `/todos/stats?range=${range}${year ? `&year=${year}` : ""}&timezoneOffset=${timezoneOffset}`,
   );
   return data;
 };
